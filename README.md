@@ -57,6 +57,8 @@ finance_project/
 
 │   ├── simulation.py       # Simulation class (GBM Monte Carlo)
 
+│   ├── portfolio.py        # Correlation and covariance
+
 │
 
 ├── requirements.txt        # Python dependencies
