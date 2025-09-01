@@ -80,44 +80,62 @@ class Simulation(FinancialInstrument):
         return float((ST > S0).mean())
 
     def run_simulation(self, horizon_years=10, n_sims=1000, steps_per_year=252, mu=None, sigma=None,
-                       plot=True, n_plot_paths=50, seed=None):
-        """
-        Run GBM sims and return a dict with:
-          - 'paths': DataFrame (date indexed) of simulated prices
-          - 'prob_increase': probability final > S0
-          - 'S0': starting price
-          - 'ST_stats': dict with mean, median, std of final prices
+                   plot=True, n_plot_paths=50, seed=None):
+      """
+      Run GBM sims and return a dict with:
+        - 'paths': DataFrame (date indexed) of simulated prices
+        - 'prob_increase': probability final > S0
+        - 'S0': starting price
+        - 'ST_stats': dict with mean, median, std of final prices
+      """
+      if seed is not None:
+          np.random.seed(seed)
 
-        If plot=True, shows up to n_plot_paths sampled paths.
-        """
-        if seed is not None:
-            np.random.seed(seed)
+      # Ensure we always have mu and sigma
+      if mu is None or sigma is None:
+          mu, sigma = self._get_mu_sigma()
 
-        paths = self.gbm_paths(mu=mu, sigma=sigma, T=horizon_years,
-                               steps_per_year=steps_per_year, n_sims=n_sims, as_dates=True)
-        S0 = float(self.df['Close'].iloc[-1])
-        ST = paths.iloc[-1, :]
+      paths = self.gbm_paths(mu=mu, sigma=sigma, T=horizon_years,
+                            steps_per_year=steps_per_year, n_sims=n_sims, as_dates=True)
+      S0 = float(self.df['Close'].iloc[-1])
+      ST = paths.iloc[-1, :]
 
-        result = {
-            'paths': paths,
-            'prob_increase': float((ST > S0).mean()),
-            'S0': S0,
-            'ST_stats': {
-                'mean': float(ST.mean()),
-                'median': float(ST.median()),
-                'std': float(ST.std()),
-            }
-        }
+      result = {
+          'paths': paths,
+          'prob_increase': float((ST > S0).mean()),
+          'S0': S0,
+          'ST_stats': {
+              'mean': float(ST.mean()),
+              'median': float(ST.median()),
+              'std': float(ST.std()),
+          }
+      }
 
-        if plot:
-            sample = paths.iloc[:, :min(n_plot_paths, paths.shape[1])]
-            plt.figure(figsize=(10, 6))
-            sample.plot(legend=False, alpha=0.6)
-            plt.axhline(S0, color='k', linestyle='--', linewidth=1, label='S0')
-            plt.title(f"GBM sample paths (n_sims={n_sims}, showing {sample.shape[1]})")
-            plt.xlabel("Date")
-            plt.ylabel("Price")
-            plt.grid(True)
-            plt.show()
+      if plot:
+          sample = paths.iloc[:, :min(n_plot_paths, paths.shape[1])]
+          ax = sample.plot(legend=False, alpha=0.3, figsize=(10, 6))
 
-        return result
+          # Add starting price line
+          s0_line = plt.axhline(S0, color='k', linestyle='--', linewidth=1, label='S0')
+          """
+          # Expected path (mean)
+          time_grid = np.linspace(0, horizon_years, steps_per_year * horizon_years + 1)
+          expected_path = S0 * np.exp(mu * time_grid)
+          expected_line, = ax.plot(paths.index, expected_path, color="blue", linewidth=2.5, label="Expected (mean)")
+
+          # Median path
+          median_path = S0 * np.exp((mu - 0.5 * sigma**2) * time_grid)
+          median_line, = ax.plot(paths.index, median_path, color="orange", linewidth=2.0, linestyle="--", label="Median")
+          """
+          plt.title(f"GBM sample paths (n_sims={n_sims}, showing {sample.shape[1]})")
+          plt.xlabel("Date")
+          plt.ylabel("Price")
+          plt.grid(True)
+          plt.legend([expected_line, median_line, s0_line], ['Expected (mean)', 'Median', 'S0'], loc='upper left')
+          plt.show()
+
+
+
+      return result
+
+
