@@ -44,14 +44,23 @@ Future extension: percentile “fan charts” (10th–90th percentile bands).
 📂 Project Structure
 finance_project/
 │
+
 ├── main.py                 # Entry point — user interaction & orchestration
+
 │
+
 ├── src/
+
 │   ├── data_loader.py      # Download & prepare Yahoo Finance data
+
 │   ├── analysis.py         # FinancialInstrument & TimeSeriesAnalysis classes
+
 │   ├── simulation.py       # Simulation class (GBM Monte Carlo)
+
 │
+
 ├── requirements.txt        # Python dependencies
+
 └── README.md               # You are here 🚀
 
 
