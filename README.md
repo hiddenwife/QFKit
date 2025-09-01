@@ -10,11 +10,19 @@ A modular Python toolkit for **time-series analysis** and **Monte Carlo simulati
 
 ## Project Structure
 finance_project/
+
 ├── main.py # Entry point (CLI orchestration)
+
 ├── src/
+
 │ ├── data_loader.py # Fetch & preprocess data
+
 │ ├── analysis.py # FinancialInstrument & TimeSeriesAnalysis
+
 │ ├── simulation.py # Monte Carlo GBM simulation
+
 │ ├── portfolio.py # Portfolio analytics
+
 ├── requirements.txt
+
 └── README.md
