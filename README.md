@@ -2,6 +2,11 @@
 
 A modular Python toolkit for **time-series analysis** and **Monte Carlo simulations** of stocks, ETFs, and indices using Yahoo Finance data.  
 
+## Quick Start
+```bash
+pip install -r requirements.txt
+python main.py
+
 ## Features
 - **Data loading**: Fetches OHLCV data via `yfinance`, computes log returns, handles invalid tickers gracefully.  
 - **Analysis**: Annualised returns/volatility, Sharpe ratio, CAGR, Value-at-Risk, growth probabilities, rolling stats, moving averages, relative growth, return plots.  
