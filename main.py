@@ -2,7 +2,7 @@ from src.data_loader import get_stock_data
 from src.analysis import FinancialInstrument, TimeSeriesAnalysis
 from src.portfolio import Portfolio
 import numpy as np
-from src.simulation import Simulation
+from src.simulation import Simulation 
 
 
 #stock_list = ["ACWI", "SPXL", "AAPL", "^GSPC", "^FTSE", "VWCE.DE"]
