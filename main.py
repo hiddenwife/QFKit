@@ -106,36 +106,44 @@ prompt_and_plot_portfolio(portfolio)
 
 simulations = {t: Simulation(t, inst.df) for t, inst in instruments.items()}
 
+
+def run_and_print_simulation(sim, ticker_choice):
+    res = sim.run_simulation(
+        horizon_years=5,
+        n_sims=10000,
+        steps_per_year=252,
+        plot=True,
+        n_plot_paths=100,
+        seed=42
+    )
+    print(f"\nSimulation results for {ticker_choice}:")
+    print(f"  P(end > today): {res['prob_increase']:.2%}")
+    print("  Final price stats:")
+    for k, v in res['ST_stats'].items():
+        print(f"    {k.capitalize()}: {v:.2f}")
+        
+
 while True:
     decision = input("\nDo you want to run and plot a simulation? [y/n]\n").strip().lower()
     if decision in ('y', 'yes'):
-        # Ask which ticker to simulate
-        while True:
-            ticker_choice = input(f"Which ticker? Available: {', '.join(simulations.keys())}\n").strip().upper()
-            if ticker_choice in simulations:
-                sim = simulations[ticker_choice]
-
-                # Run the simulation
-                res = sim.run_simulation(
-                    horizon_years=5,
-                    n_sims=2000,
-                    steps_per_year=252,
-                    plot=True,
-                    n_plot_paths=100,
-                    seed=42
-                )
-
-                print(f"\nSimulation results for {ticker_choice}:")
-                print(f"  P(end > today): {res['prob_increase']:.2%}")
-                print("  Final price stats:")
-                for k, v in res['ST_stats'].items():
-                    print(f"    {k.capitalize()}: {v:.2f}")
-
-                break
-            else:
-                print("❌ Invalid ticker. Please choose from the list above.")
-
-        break  # Exit after running one simulation
+        if not simulations:
+            print("❌ No valid simulations available.")
+            break
+        elif len(simulations) == 1:
+            ticker_choice = next(iter(simulations.keys()))
+            sim = simulations[ticker_choice]
+            run_and_print_simulation(sim, ticker_choice)
+            break
+        else:
+            while True:
+                ticker_choice = input(f"Which ticker? Available: {', '.join(simulations.keys())}\n").strip().upper()
+                if ticker_choice in simulations:
+                    sim = simulations[ticker_choice]
+                    run_and_print_simulation(sim, ticker_choice)
+                    break
+                else:
+                    print("❌ Invalid ticker. Please choose from the list above.")
+            break
     elif decision in ('n', 'no'):
         break
     else:

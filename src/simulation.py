@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
 from src.analysis import FinancialInstrument
 
 class Simulation(FinancialInstrument):
@@ -112,29 +113,44 @@ class Simulation(FinancialInstrument):
       }
 
       if plot:
-          sample = paths.iloc[:, :min(n_plot_paths, paths.shape[1])]
-          ax = sample.plot(legend=False, alpha=0.3, figsize=(10, 6))
+          # Ensure paths.index is a DatetimeIndex before plotting
+          if not isinstance(paths.index, pd.DatetimeIndex):
+              start_date = pd.Timestamp.today()
+              paths.index = pd.bdate_range(start=start_date, periods=len(paths.index))
 
-          # Add starting price line
-          s0_line = plt.axhline(S0, color='k', linestyle='--', linewidth=1, label='S0')
-          """
-          # Expected path (mean)
-          time_grid = np.linspace(0, horizon_years, steps_per_year * horizon_years + 1)
-          expected_path = S0 * np.exp(mu * time_grid)
-          expected_line, = ax.plot(paths.index, expected_path, color="blue", linewidth=2.5, label="Expected (mean)")
+          # Normalize paths for relative growth
+          sample = paths.iloc[:, :min(n_plot_paths, paths.shape[1])] / S0
 
-          # Median path
-          median_path = S0 * np.exp((mu - 0.5 * sigma**2) * time_grid)
-          median_line, = ax.plot(paths.index, median_path, color="orange", linewidth=2.0, linestyle="--", label="Median")
-          """
-          plt.title(f"GBM sample paths (n_sims={n_sims}, showing {sample.shape[1]})")
-          plt.xlabel("Date")
-          plt.ylabel("Price")
-          plt.grid(True)
-          plt.legend([expected_line, median_line, s0_line], ['Expected (mean)', 'Median', 'S0'], loc='upper left')
+          fig, ax = plt.subplots(figsize=(10, 6))
+
+          # Plot sample paths (relative growth)
+          for col in sample.columns:
+              ax.plot(sample.index, sample[col], color='gray', alpha=0.4, linewidth=1)
+
+          # Add starting line (always 1)
+          s0_line = ax.axhline(1, color='k', linestyle='--', linewidth=1, label='Start (S0)')
+
+          # Expected path (mean, normalized)
+          time_grid = np.linspace(0, horizon_years, len(sample.index))
+          expected_path = np.exp(mu * time_grid)
+          expected_line, = ax.plot(sample.index, expected_path, color="blue", linewidth=2.5, label="Expected (mean)")
+
+          # Median path (normalized)
+          median_path = np.exp((mu - 0.5 * sigma**2) * time_grid)
+          median_line, = ax.plot(sample.index, median_path, color="red", linewidth=2.0, label="Median")
+
+          info_proxy = Line2D([], [], linestyle='None', label=f"μ={mu:.2%}, std={sigma:.2%}, S0={S0:.2f}, P(end > S0)={result['prob_increase']:.2%}")
+
+          ax.set_title(f"GBM relative growth for {self.ticker} over {horizon_years}y (n_sims={n_sims}, showing {sample.shape[1]})")
+          ax.set_xlabel("Date")
+          ax.set_ylabel("Relative Growth")
+          ax.grid(True)
+          ax.legend([expected_line, median_line, s0_line, info_proxy], 
+                    [f'Expected (mean) = {expected_path[-1]:.2f}', 
+                        f'Median = {median_path[-1]:.2f}',
+                        f"P(end > S0) = {result['prob_increase']:.2%}"], 
+                    loc='upper left')
           plt.show()
-
-
 
       return result
 
