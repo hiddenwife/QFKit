@@ -2,6 +2,14 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 
+"""
+    # Only if the user inputs more than one ticker will a portfolio be created
+    if not len(tickers) in (0, 1):
+        portfolio = Portfolio(instruments)
+        prompt_and_plot_portfolio(portfolio)
+
+"""
+
 class Portfolio:
     def __init__(self, instruments: dict):
         """

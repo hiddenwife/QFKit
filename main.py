@@ -99,12 +99,37 @@ def prompt_and_plot_portfolio(portfolio: Portfolio):
         else:
             print("Please answer 'y' or 'n'.")
 
-
-portfolio = Portfolio(instruments)
-
-prompt_and_plot_portfolio(portfolio)
-
 simulations = {t: Simulation(t, inst.df) for t, inst in instruments.items()}
+
+# Only if the user inputs more than one ticker will a portfolio be created
+if not len(tickers) in (0, 1):
+    portfolio = Portfolio(instruments)
+    prompt_and_plot_portfolio(portfolio)
+    
+    # Calculate portfolio historical price series
+    tickers_port = list(portfolio.instruments.keys())
+    n = len(tickers_port)
+    w_input = input(f"Enter {n} weights for {tickers_port} separated by space (or press Enter for equal weights):\n").strip()
+    if w_input:
+        w = np.array([float(x) for x in w_input.split()])
+        if len(w) != n:
+            raise ValueError("Number of weights must match number of tickers.")
+        w = w / w.sum()
+    else:
+        w = np.ones(n) / n
+
+    # Build portfolio price series (weighted sum of normalized prices)
+    price_df = np.column_stack([instruments[t].df['Close'].values for t in tickers_port])
+    portfolio_prices = np.dot(price_df, w)
+    portfolio_dates = instruments[tickers_port[0]].df.index  # assumes all have same dates
+
+    # Create DataFrame for portfolio
+    portfolio_df = instruments[tickers_port[0]].df.copy()
+    portfolio_df['Close'] = portfolio_prices
+
+    # Add portfolio as a pseudo-ticker
+    instruments['PORTFOLIO'] = TimeSeriesAnalysis('PORTFOLIO', portfolio_df)
+    simulations['PORTFOLIO'] = Simulation('PORTFOLIO', portfolio_df)
 
 
 def run_and_print_simulation(sim, ticker_choice):
@@ -136,10 +161,16 @@ while True:
             break
         else:
             while True:
-                ticker_choice = input(f"Which ticker? Available: {', '.join(simulations.keys())}\n").strip().upper()
+                ticker_choice = input(f"Which ticker? Available: {', '.join(simulations.keys())}, 'all', or 'none'):\n").strip().upper()
                 if ticker_choice in simulations:
                     sim = simulations[ticker_choice]
                     run_and_print_simulation(sim, ticker_choice)
+                    break
+                elif ticker_choice == 'ALL':
+                    for sim in simulations.values():
+                        run_and_print_simulation(sim, ticker_choice)
+                    break
+                elif ticker_choice == 'NONE':
                     break
                 else:
                     print("❌ Invalid ticker. Please choose from the list above.")
@@ -148,3 +179,39 @@ while True:
         break
     else:
         print("Please answer 'y' or 'n'.")
+
+
+def prompt_compare_simulation(simulations):
+    """
+    Prompt user to choose a ticker to compare simulated vs real paths,
+    or run for all tickers.
+    """
+    if not simulations:
+        print("❌ No simulations available.")
+        return
+
+    while True:
+        choice = input(f"\nCompare simulated vs real price paths for which ticker? (type {', '.join(simulations.keys())}, 'all', or 'none'):\n").strip().upper()
+        if choice in ('NONE', 'N'):
+            return
+        elif choice == 'ALL':
+            to_run = list(simulations.keys())
+            break
+        elif choice in simulations:
+            to_run = [choice]
+            break
+        print(f"❌ Invalid choice. Enter {', '.join(simulations.keys())}, 'all', or 'none'.")
+
+    for t in to_run:
+        sim = simulations[t]
+        print(f"\nRunning comparison for {t} ...")
+        # runs comparison from first real date to last real date and plots
+        out = sim.compare_simulation_to_real(n_sims=2000, steps_per_year=252, seed=42, plot=True)
+        # print simple numeric comparison at end date
+        real_end = out['real'].iloc[-1] if not out['real'].isna().all() else None
+        sim_expected_end = out['expected'].iloc[-1]
+        sim_median_end = out['median'].iloc[-1]
+        print(f"Ticker {t}: Real end = {real_end}, Sim expected end = {sim_expected_end:.2f}, Sim median end = {sim_median_end:.2f}")
+
+# call the prompt at end of main
+prompt_compare_simulation(simulations)

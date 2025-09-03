@@ -154,4 +154,107 @@ class Simulation(FinancialInstrument):
 
       return result
 
+    def compare_simulation_to_real(self, n_sims=5000, steps_per_year=252, start_date=None,
+                                  end_date=None, include_ci=True, ci=0.95, seed=None, plot=True):
+        """
+        Simulate GBM from the dataset start (or given start_date) up to end_date (or last real date)
+        and compare expected/median simulated paths to the real Close series.
+
+        Returns a dict with keys:
+          - 'sim_dates': DatetimeIndex used for simulation
+          - 'expected': expected price series (mean across sims) indexed by sim_dates
+          - 'median': median price series indexed by sim_dates
+          - 'ci': (lower, upper) arrays if include_ci True, else None
+          - 'paths': DataFrame of all simulated end-to-end paths (may be large)
+          - 'real': real Close series aligned to sim_dates (may contain NaN if dates mismatch)
+        """
+        if seed is not None:
+            np.random.seed(seed)
+
+        # Determine simulation date range
+        df_index = pd.to_datetime(self.df.index)
+        start = pd.to_datetime(start_date) if start_date is not None else df_index[0]
+        end = pd.to_datetime(end_date) if end_date is not None else df_index[-1]
+
+        # Use business days for index and compute years horizon
+        sim_dates = pd.bdate_range(start=start, end=end)
+        total_steps = len(sim_dates) - 1
+        if total_steps <= 0:
+            raise ValueError("Simulation period must contain at least 1 step (end > start).")
+
+        T = total_steps / steps_per_year
+        dt = T / total_steps
+
+        mu, sigma = (self._get_mu_sigma() if (mu := None) is None else (mu, sigma))  # use historical if not provided
+        # (above line just forces use of _get_mu_sigma)
+
+        # Starting price: use Close at start (if start equals first index) or interpolate/locate nearest
+        try:
+            S0 = float(self.df.loc[start, 'Close'])
+        except Exception:
+            # fall back to first close if exact start not found
+            S0 = float(self.df['Close'].iloc[0])
+
+        # Simulate
+        paths = np.empty((total_steps + 1, n_sims), dtype=float)
+        paths[0, :] = S0
+        for t in range(1, total_steps + 1):
+            Z = np.random.standard_normal(n_sims)
+            paths[t, :] = paths[t-1, :] * np.exp((mu - 0.5 * sigma**2) * dt + sigma * np.sqrt(dt) * Z)
+
+        paths_df = pd.DataFrame(paths, index=sim_dates)
+
+        # Compute statistics
+        expected = paths_df.mean(axis=1)
+        median = paths_df.median(axis=1)
+        ci_lower = ci_upper = None
+        if include_ci:
+            lower_q = (1 - ci) / 2
+            upper_q = 1 - lower_q
+            ci_lower = paths_df.quantile(lower_q, axis=1)
+            ci_upper = paths_df.quantile(upper_q, axis=1)
+
+        # Align real data to sim_dates (reindex with forward/backfill if needed)
+        real_close = self.df['Close'].reindex(sim_dates)
+        # if real_close is all NaN (e.g., sim started before data), try aligning overlapping portion
+        if real_close.isna().all():
+            # align to overlapping range
+            overlap = sim_dates.intersection(pd.to_datetime(self.df.index))
+            real_close = self.df['Close'].reindex(overlap)
+            expected = expected.reindex(overlap)
+            median = median.reindex(overlap)
+            if include_ci:
+                ci_lower = ci_lower.reindex(overlap)
+                ci_upper = ci_upper.reindex(overlap)
+            paths_df = paths_df.reindex(overlap)
+
+        result = {
+            'sim_dates': paths_df.index,
+            'expected': expected,
+            'median': median,
+            'ci': (ci_lower, ci_upper) if include_ci else None,
+            'paths': paths_df,
+            'real': real_close
+        }
+
+        if plot:
+            fig, ax = plt.subplots(figsize=(12, 6))
+            # plot real
+            ax.plot(result['real'].index, result['real'].values / result['real'].iloc[0], label=f'Real (norm) {(result['real'].values[-1] / result['real'].iloc[0]):.2f}', color='black', linewidth=2)
+            # plot expected & median normalized to same S0
+            ax.plot(result['expected'].index, result['expected'].values / result['expected'].iloc[0], label=f'Sim Expected (norm) {(result['expected'].values[-1] / result['expected'].iloc[0]):.2f}', color='blue', linewidth=2)
+            ax.plot(result['median'].index, result['median'].values / result['median'].iloc[0], label=f'Sim Median (norm) {(result['median'].values[-1] / result['median'].iloc[0]):.2f}', color='red', linewidth=1.8, linestyle='--')
+
+            if include_ci and result['ci'][0] is not None:
+                ax.fill_between(result['sim_dates'], (result['ci'][0] / result['expected'].iloc[0]), (result['ci'][1] / result['expected'].iloc[0]),
+                                color='blue', alpha=0.15, label=f'{int(ci*100)}% CI (sim)')
+
+            ax.set_title(f"Simulated expected & median vs Real ({self.ticker})\nSim from {result['sim_dates'][0].date()} to {result['sim_dates'][-1].date()}")
+            ax.set_ylabel("Normalized price (start = 1)")
+            ax.set_xlabel("Date")
+            ax.legend()
+            ax.grid(True)
+            plt.show()
+
+        return result
 
