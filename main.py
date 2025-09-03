@@ -179,3 +179,39 @@ while True:
         break
     else:
         print("Please answer 'y' or 'n'.")
+
+
+def prompt_compare_simulation(simulations):
+    """
+    Prompt user to choose a ticker to compare simulated vs real paths,
+    or run for all tickers.
+    """
+    if not simulations:
+        print("❌ No simulations available.")
+        return
+
+    while True:
+        choice = input(f"\nCompare simulated vs real price paths for which ticker? (type {', '.join(simulations.keys())}, 'all', or 'none'):\n").strip().upper()
+        if choice in ('NONE', 'N'):
+            return
+        elif choice == 'ALL':
+            to_run = list(simulations.keys())
+            break
+        elif choice in simulations:
+            to_run = [choice]
+            break
+        print(f"❌ Invalid choice. Enter {', '.join(simulations.keys())}, 'all', or 'none'.")
+
+    for t in to_run:
+        sim = simulations[t]
+        print(f"\nRunning comparison for {t} ...")
+        # runs comparison from first real date to last real date and plots
+        out = sim.compare_simulation_to_real(n_sims=2000, steps_per_year=252, seed=42, plot=True)
+        # print simple numeric comparison at end date
+        real_end = out['real'].iloc[-1] if not out['real'].isna().all() else None
+        sim_expected_end = out['expected'].iloc[-1]
+        sim_median_end = out['median'].iloc[-1]
+        print(f"Ticker {t}: Real end = {real_end}, Sim expected end = {sim_expected_end:.2f}, Sim median end = {sim_median_end:.2f}")
+
+# call the prompt at end of main
+prompt_compare_simulation(simulations)
