@@ -170,23 +170,31 @@ class TimeSeriesAnalysis(FinancialInstrument):
 
   @staticmethod
   def plot_all_returns(instruments):
-    """Plot monthly returns of multiple tickers on one chart."""
-    monthly_returns = {}
-    
-    # Calculate monthly returns for each instrument
+    """Plot yearly returns of multiple tickers on one chart."""
+    yearly_returns = {}
+
+    # Calculate yearly returns for each instrument
     for ticker, inst in instruments.items():
-        # Resample daily log returns to monthly returns
-        monthly_returns[ticker] = inst.df['Log_Returns'].resample('M').sum() * 100  # Convert to percentage
+        # Resample daily log returns to yearly returns
+        yearly = inst.df['Log_Returns'].resample('Y').sum() * 100  # Convert to percentage
+        yearly.index = pd.to_datetime(yearly.index)  # ensure datetime index
+        yearly_returns[ticker] = yearly
 
-    # Create a DataFrame from the monthly returns dictionary
-    monthly_returns_df = pd.DataFrame(monthly_returns)
+    # Create a DataFrame from the yearly returns dictionary
+    yearly_returns_df = pd.DataFrame(yearly_returns)
 
-    # Plotting
-    ax = monthly_returns_df.plot(kind='bar', alpha=0.7, figsize=(10, 6))
-    ax.set_title("Monthly Returns Comparison")
+    # Plotting using matplotlib and set x-axis ticks to show only the year
+    fig, ax = plt.subplots(figsize=(10, 6))
+    yearly_returns_df.plot(kind='bar', alpha=0.7, ax=ax)
+    ax.set_title("Yearly Returns Comparison")
     ax.set_ylabel("Return (%)")
-    ax.set_xlabel("Month")
+    ax.set_xlabel("Year")
     ax.legend(title="Tickers")
-    plt.xticks(rotation=45)  # Rotate x-axis labels for better readability
+
+    # Replace x-axis tick labels with the year only (e.g. 2020, 2021, ...)
+    years = [d.year for d in pd.to_datetime(yearly_returns_df.index)]
+    ax.set_xticks(np.arange(len(years)))
+    ax.set_xticklabels(years, rotation=0)
+
     plt.tight_layout()  # Adjust layout to prevent clipping of tick labels
     plt.show()

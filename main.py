@@ -12,6 +12,11 @@ from gui import launch_gui
 print("This code will compare funds, ETFs, trackers etc from Yahoo Finance.")
 print("It will plot them and calculate growth probabilities and past returns.\n")
 
+use_gui = input("Open GUI (recommended)? [y/n]: ").strip().lower() in ("y","yes")
+if use_gui:
+    launch_gui()
+    # exit after GUI closes
+    exit(0)
 
 # --- Loop until user provides at least one ticker
 while True:
@@ -22,7 +27,7 @@ while True:
     if tickers:
         break
     else:
-        print("❌ No tickers provided. Please try again.\n")
+        print("No tickers provided. Please try again.\n")
 
 # --- Load data safely
 instruments = {}  # Dictionary to store TimeSeriesAnalysis objects
@@ -32,7 +37,7 @@ for ticker in tickers:
     try:
         df = get_stock_data(ticker)
         if df.empty:
-            print(f"⚠️ {ticker} returned no data. Skipping.")
+            print(f"{ticker} returned no data. Skipping.")
             continue
         
         instruments[ticker] = TimeSeriesAnalysis(ticker, df)  # Store ticker as an attribute
@@ -110,8 +115,6 @@ simulations = {t: Simulation(t, inst.df) for t, inst in instruments.items()}
 # Only if the user inputs more than one ticker will a portfolio be created
 if not len(tickers) in (0, 1):
     portfolio = Portfolio(instruments)
-    w = prompt_and_plot_portfolio(portfolio)
-
     # Calculate portfolio historical price series
     tickers_port = list(portfolio.instruments.keys())
 

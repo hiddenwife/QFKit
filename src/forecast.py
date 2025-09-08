@@ -16,7 +16,7 @@ Primary API:
 Design goals:
  - Safe defaults for use in interactive scripts
  - Handles missing dates by using business-day index for forecasts
- - Uses pmdarima.auto_arima when available (falls back to statsmodels.ARIMA if not)
+ - Uses pmdarima.auto_arima when available (falls back to statsmodels.ARIMA if not) - issues with downloading it - numpy version?
  - Fits a GARCH model on ARIMA residuals using arch if available
  - Produces volatility-adjusted confidence intervals that grow with forecast horizon
 
