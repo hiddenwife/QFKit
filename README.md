@@ -54,6 +54,8 @@ finance_project/
 
 │ ├── portfolio.py # Portfolio analytics
 
+│ ├── forecast.py # Future forecasting
+
 ├── requirements.txt
 
 └── README.md
