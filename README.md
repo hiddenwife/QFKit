@@ -1,4 +1,4 @@
-# 📈 Financial Analysis & Simulation Toolkit
+# Financial Analysis & Simulation Toolkit
 
 A modular Python toolkit for **time-series analysis** and **Monte Carlo simulations** of stocks, ETFs, and indices using Yahoo Finance data.  
 
@@ -12,6 +12,7 @@ python main.py
 - **Analysis**: Annualised returns/volatility, Sharpe ratio, CAGR, Value-at-Risk, growth probabilities, rolling stats, moving averages, relative growth, return plots.  
 - **Portfolio tools**: Correlation & covariance matrices, volatility, variance contributions, cumulative growth of weighted portfolios.  
 - **Simulations**: Geometric Brownian Motion (GBM) with thousands of paths, probability of finishing above current price, terminal price stats, visualised sample paths.  
+- **Forecast**: ARIMA+GARCH for price forecasting with volatility-adjusted confidence intervals and optional outlier removal.
 
 ## Project Structure
 finance_project/
