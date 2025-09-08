@@ -1,6 +1,6 @@
 # Financial Analysis & Simulation Toolkit
 
-A modular Python toolkit for **time-series analysis** and **Monte Carlo simulations** of stocks, ETFs, and indices using Yahoo Finance data, all easily traversable by a GUI.
+A modular Python toolkit for **time-series analysis** and **Monte Carlo simulations** of stocks, ETFs, and indices using Yahoo Finance data, all easily traversable with a GUI.
 
 ## Quick Start
 ```bash
