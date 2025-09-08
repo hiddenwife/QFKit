@@ -3,12 +3,15 @@ from src.analysis import FinancialInstrument, TimeSeriesAnalysis
 from src.portfolio import Portfolio
 import numpy as np
 from src.simulation import Simulation
+from src.forecast import Forecaster
+from gui import launch_gui
 
 
 #stock_list = ["ACWI", "SPXL", "AAPL", "^GSPC", "^FTSE", "VWCE.DE"]
 
 print("This code will compare funds, ETFs, trackers etc from Yahoo Finance.")
 print("It will plot them and calculate growth probabilities and past returns.\n")
+
 
 # --- Loop until user provides at least one ticker
 while True:
@@ -60,6 +63,7 @@ def prompt_and_plot_portfolio(portfolio: Portfolio):
     """
     Interactive helper to get weights from the user (or use equal weights),
     print key metrics, and optionally plot cumulative returns.
+    Returns the weights used.
     """
     tickers = list(portfolio.instruments.keys())
     n = len(tickers)
@@ -99,24 +103,17 @@ def prompt_and_plot_portfolio(portfolio: Portfolio):
         else:
             print("Please answer 'y' or 'n'.")
 
+    return w
+
 simulations = {t: Simulation(t, inst.df) for t, inst in instruments.items()}
 
 # Only if the user inputs more than one ticker will a portfolio be created
 if not len(tickers) in (0, 1):
     portfolio = Portfolio(instruments)
-    prompt_and_plot_portfolio(portfolio)
-    
+    w = prompt_and_plot_portfolio(portfolio)
+
     # Calculate portfolio historical price series
     tickers_port = list(portfolio.instruments.keys())
-    n = len(tickers_port)
-    w_input = input(f"Enter {n} weights for {tickers_port} separated by space (or press Enter for equal weights):\n").strip()
-    if w_input:
-        w = np.array([float(x) for x in w_input.split()])
-        if len(w) != n:
-            raise ValueError("Number of weights must match number of tickers.")
-        w = w / w.sum()
-    else:
-        w = np.ones(n) / n
 
     # Build portfolio price series (weighted sum of normalized prices)
     price_df = np.column_stack([instruments[t].df['Close'].values for t in tickers_port])
@@ -215,3 +212,67 @@ def prompt_compare_simulation(simulations):
 
 # call the prompt at end of main
 prompt_compare_simulation(simulations)
+
+
+def prompt_forecasting(instruments):
+    if not instruments:
+        print("❌ No instruments loaded.")
+        return
+
+    print("\nForecasting menu — available tickers:", ", ".join(instruments.keys()))
+    while True:
+        choice = input("Select ticker for forecasting (or 'none' to skip):\n").strip()
+        if choice.lower() in ('none', ''):
+            return
+        if choice not in instruments:
+            print("❌ Invalid ticker. Try again.")
+            continue
+
+        inst = instruments[choice]
+
+        # Ask if user wants to use only recent data
+        use_recent = input("Use only recent data (last 250 days)? [y/n]: ").strip().lower() in ('y', 'yes')
+        if use_recent:
+            df_for_forecast = inst.df.iloc[-250:]
+        else:
+            df_for_forecast = inst.df
+
+        fc = Forecaster(df_for_forecast)  # uses Log_Returns by default
+
+        # Fit models (safe defaults)
+        try:
+            fc.fit()
+        except Exception as e:
+            print("Model fit failed:", e)
+            # continue to next ticker or allow retry
+            if input("Retry fit? [y/n]: ").strip().lower() in ('y', 'yes'):
+                continue
+            else:
+                if input("Forecast next ticker? [y/n]: ").strip().lower() in ('y', 'yes'):
+                    continue
+                else:
+                    break
+
+        # Produce a numeric preview of the next N forecasts
+        steps = 20
+        try:
+            forecast_df = fc.forecast(steps=steps)
+            print(f"\nPrice forecast for next {steps} periods (first 5 rows):")
+            print(forecast_df.head().to_string())
+        except Exception as e:
+            print("Forecast failed:", e)
+
+        # Ask to plot
+        if input("Plot price forecast? [y/n]: ").strip().lower() in ('y', 'yes'):
+            try:
+                fc.plot_forecast(steps=steps, history=100)
+            except Exception as e:
+                print("Plot failed:", e)
+
+        # repeat or exit
+        if input("\nRun forecasting for another ticker? [y/n]: ").strip().lower() not in ('y','yes'):
+            break
+
+# call prompt after simulations/prompt_compare_simulation
+prompt_forecasting(instruments)
+

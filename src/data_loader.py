@@ -2,7 +2,7 @@ import yfinance as yf
 import numpy as np
 import pandas as pd
 
-def get_stock_data(ticker, start="2020-01-01", end="2025-09-01"):
+def get_stock_data(ticker, start="2022-01-01", end="2025-09-01"):
     """
     Downloads historical stock data using Yahoo Finance.
     Adds log returns to the DataFrame.
