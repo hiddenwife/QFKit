@@ -28,7 +28,7 @@ python main.py
 - Quick creation of weighted portfolios from any combination of tickers.
 - Automatic normalisation of weights and construction of a portfolio price series.
 - Full analytics: covariance/correlation, annualised volatility, variance % contribution, cumulative return plots.
-- Use the portfolio like any other instrument — simulate, compare to real price history, or forecast.
+- Use the portfolio like any other instrument: simulate, compare to real price history, or forecast.
 
 **Simulations**:
 - Geometric Brownian Motion (GBM) with thousands of paths, probability of finishing above current price, terminal price stats, visualised sample paths.  
