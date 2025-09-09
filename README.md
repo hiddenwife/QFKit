@@ -7,6 +7,7 @@ A modular Python toolkit for **time-series analysis** and **Monte Carlo simulati
 pip install -r requirements.txt
 python main.py
 ```
+**NOTE**: Python package **pmdarima** may not be installed; do not worry, the code accounts if this package is missing!
 
 ## GUI
 - Tabs for: Load Data, Analysis, Portfolio, Simulation, Compare, Forecast.
