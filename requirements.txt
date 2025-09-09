@@ -6,3 +6,4 @@ scipy
 statsmodels
 arch
 scikit-learn
+pmdarima
