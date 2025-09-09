@@ -7,7 +7,7 @@ A modular Python toolkit for **time-series analysis** and **Monte Carlo simulati
 pip install -r requirements.txt
 python main.py
 ```
-**NOTE**: **pmdarima** (optional) may have installation issues. Installed only needed for auto-ARIMA functionality; the code runs without it.
+**NOTE**: **pmdarima** (optional) may have installation issues. Only needed for auto-ARIMA functionality; the code runs without it.
 
 ## GUI
 - Tabs for: Load Data, Analysis, Portfolio, Simulation, Compare, Forecast.
