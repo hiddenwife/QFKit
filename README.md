@@ -46,7 +46,7 @@ Whether you're considering investments in shares or funds, this tool offers a qu
 - All heavy computations run off the main thread; plotting and UI updates are scheduled on the main thread to keep the UI responsive.
 
 ## Project Structure
-finance_project/
+financial_tools/
 
 ├── main.py # Entry point
 
