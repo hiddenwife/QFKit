@@ -10,7 +10,7 @@ python main.py
 **NOTE**: **pmdarima** (optional) may have installation issues. Only needed for auto-ARIMA functionality; the code runs without it.
 
 ## Overview and Usage
-To get started, simply input the tickers (e.g., AAPL for Apple) into the designated section of the GUI. This toolkit is designed for analysing companies, funds, ETFs, and indices, making it particularly valuable for investors looking to make informed decisions about where to allocate their capital.
+To get started, simply input the tickers from Yahoo Finance (e.g., AAPL for Apple) into the designated section of the GUI. This toolkit is designed for analysing companies, funds, ETFs, and indices, making it particularly valuable for investors looking to make informed decisions about where to allocate their capital.
 
 One of the standout features of this toolkit is the ability to create a **weighted portfolio** of different funds. You can analyse how this portfolio has performed historically and use the built-in simulation tool to assess the likelihood of future growth. This allows you to compare the potential returns of various assets and make data-driven investment choices.
 
