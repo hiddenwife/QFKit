@@ -1,10 +1,21 @@
+"""
+About:
+  Modular Python toolkit for ETF, fund, and portfolio analytics. 
+  Integrates market data (yfinance) with time-series analysis, 
+  Monte Carlo (GBM) simulations, risk metrics, and ARIMA+GARCH forecasting, 
+  all accessible via an interactive GUI.
+
+Developer: Christopher Andrews
+GitHub: https://github.com/hiddenwife/financial_tools
+
+"""
+
 from gui import launch_gui
 from tkinter import TclError
 
 
 #stock_list = ["ACWI", "SPXL", "AAPL", "^GSPC", "^FTSE", "VWCE.DE"]
 print("This code will compare funds, ETFs, trackers etc from Yahoo Finance.")
-print("It will plot them and calculate growth probabilities and past returns.\n")
 
 try:
     launch_gui()

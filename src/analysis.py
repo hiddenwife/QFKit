@@ -86,7 +86,7 @@ class FinancialInstrument:
   
   def average_yearly_simple_return(self):
       mu_log, _ = self.annualised_return()  # already annualised log-return
-      simple_return = np.exp(mu_log) - 1    # convert log return → simple return
+      simple_return = np.exp(mu_log) - 1    # convert log return -> simple return
       return simple_return * 100            # in percentage
 
   def compute_cagr(self):
@@ -151,10 +151,10 @@ class TimeSeriesAnalysis(FinancialInstrument):
         ax = None
         for ticker, inst in instruments.items():
             growth = inst.df['Close'] / inst.df['Close'].iloc[0]
-            cagr = inst.compute_cagr()  # keep as decimal, e.g. 0.075 for 7.5%
+            cagr = inst.compute_cagr()
             ax = growth.plot(
                 ax=ax,
-                label=f"{ticker}, CAGR: {cagr:.2%}",  # format as percent correctly
+                label=f"{ticker}, CAGR: {cagr:.2%}", 
                 alpha=0.7,
                 figsize=(10, 6)
             )
@@ -176,11 +176,10 @@ class TimeSeriesAnalysis(FinancialInstrument):
     # Calculate yearly returns for each instrument
     for ticker, inst in instruments.items():
         # Resample daily log returns to yearly returns
-        yearly = inst.df['Log_Returns'].resample('Y').sum() * 100  # Convert to percentage
-        yearly.index = pd.to_datetime(yearly.index)  # ensure datetime index
+        yearly = inst.df['Log_Returns'].resample('Y').sum() * 100 
+        yearly.index = pd.to_datetime(yearly.index)  
         yearly_returns[ticker] = yearly
 
-    # Create a DataFrame from the yearly returns dictionary
     yearly_returns_df = pd.DataFrame(yearly_returns)
 
     # Plotting using matplotlib and set x-axis ticks to show only the year
@@ -191,10 +190,9 @@ class TimeSeriesAnalysis(FinancialInstrument):
     ax.set_xlabel("Year")
     ax.legend(title="Tickers")
 
-    # Replace x-axis tick labels with the year only (e.g. 2020, 2021, ...)
     years = [d.year for d in pd.to_datetime(yearly_returns_df.index)]
     ax.set_xticks(np.arange(len(years)))
     ax.set_xticklabels(years, rotation=0)
 
-    plt.tight_layout()  # Adjust layout to prevent clipping of tick labels
+    plt.tight_layout() 
     plt.show()
