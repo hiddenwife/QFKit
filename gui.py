@@ -41,8 +41,8 @@ class TradingAppGUI:
 
         # Build each tab
         self._build_ticker_tab()
-        self._build_analysis_tab()
         self._build_portfolio_tab()
+        self._build_analysis_tab()
         self._build_simulation_tab()
         self._build_compare_tab()
         self._build_forecast_tab()
@@ -235,6 +235,10 @@ class TradingAppGUI:
             self.master.after(0, lambda: messagebox.showerror("Input Error", "Please enter at least one ticker."))
             return
 
+        # Set default start date if not provided
+        if start is None:
+            start = "2022-01-01"
+
         self.log_print(f"\n--- Loading data for: {', '.join(tickers)} ---")
         for ticker in tickers:
             if not ticker: continue
@@ -257,103 +261,12 @@ class TradingAppGUI:
         self.master.after(0, self.refresh_all_ui_lists)
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    # "Analysis / Plots" Tab
-    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-    def _build_analysis_tab(self):
-        tab = ttk.Frame(self.nb, padding=10)
-        self.nb.add(tab, text="2. Analysis")
-        ttk.Label(tab, text="Select tickers to analyse or plot:").pack(anchor="w")
-
-        # Create the container frame ONCE
-        self.analysis_vars = {}
-        self.analysis_frame = ttk.Frame(tab)
-        self.analysis_frame.pack(fill="both", expand=True, padx=6, pady=4)
-        self._populate_analysis_checkboxes()
-
-        btn_frame = ttk.Frame(tab)
-        btn_frame.pack(fill="x", pady=10)
-        ttk.Button(btn_frame, text="Plot Relative Growth", command=self.plot_selected_growth).pack(side="left")
-        ttk.Button(btn_frame, text="Print Key Stats", command=self.print_selected_stats).pack(side="left", padx=10)
-        ttk.Button(btn_frame, text="Plot Yearly Returns", command=self.plot_selected_returns).pack(side="left", padx=10)
-
-    def _populate_analysis_checkboxes(self):
-        # Clear old widgets before repopulating
-        for widget in self.analysis_frame.winfo_children():
-            widget.destroy()
-        self.analysis_vars.clear()
-
-        canvas = tk.Canvas(self.analysis_frame)
-        scrollbar = ttk.Scrollbar(self.analysis_frame, orient="vertical", command=canvas.yview)
-        scrollable_frame = ttk.Frame(canvas)
-
-        scrollable_frame.bind(
-            "<Configure>",
-            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
-        )
-        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
-        canvas.configure(yscrollcommand=scrollbar.set)
-
-        for ticker in sorted(self.instruments.keys()):
-            var = tk.BooleanVar(value=False)
-            cb = ttk.Checkbutton(scrollable_frame, text=ticker, variable=var)
-            cb.pack(anchor="w", padx=10, pady=2)
-            self.analysis_vars[ticker] = var
-
-        canvas.pack(side="left", fill="both", expand=True)
-        scrollbar.pack(side="right", fill="y")
-
-    def refresh_analysis_checkboxes(self):
-        self._populate_analysis_checkboxes()
-
-    def plot_selected_growth(self):
-        selected = self.get_selected_tickers(self.analysis_vars)
-        if not selected:
-            messagebox.showinfo("Selection Error", "Please select at least one ticker to plot.")
-            return
-        
-        inst_to_plot = {t: self.instruments[t] for t in selected}
-        self.log_print(f"\nPlotting growth for: {', '.join(selected)}")
-        TimeSeriesAnalysis.plot_all_growth(inst_to_plot)
-        plt.show()
-
-    def plot_selected_returns(self):
-        selected = self.get_selected_tickers(self.analysis_vars)
-        if not selected:
-            messagebox.showinfo("Selection Error", "Please select at least one ticker to plot.")
-            return
-        
-        inst_to_plot = {t: self.instruments[t] for t in selected}
-        self.log_print(f"\nPlotting returns for: {', '.join(selected)}")
-        TimeSeriesAnalysis.plot_all_returns(inst_to_plot)
-        plt.show()
-
-
-    def print_selected_stats(self):
-        selected = self.get_selected_tickers(self.analysis_vars)
-        if not selected:
-            messagebox.showinfo("Selection Error", "Please select at least one ticker.")
-            return
-
-        self.log_print("\n--- Key Statistics ---")
-        for t in selected:
-            inst = self.instruments[t]
-            self.log_print(
-                f"{t}: Sharpe={inst.sharpe_ratio():.3f}, "
-                f"CAGR={inst.compute_cagr():.2%}, "
-                f"Annual Vol={inst.annualised_return()[1]:.2%}, "
-                f"5Y Growth Prob={inst.growth_probability(5):.2%}, "
-                f"10Y Growth Prob={inst.growth_probability(10):.2%}, "
-                f"15Y Growth Prob={inst.growth_probability(15):.2%}, "
-            )
-
-    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     # "Portfolio" Tab
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
     def _build_portfolio_tab(self):
         tab = ttk.Frame(self.nb, padding=10)
-        self.nb.add(tab, text="3. Portfolio")
+        self.nb.add(tab, text="2. Portfolio")
         ttk.Label(tab, text="Select assets and specify weights to create a portfolio:").pack(anchor="w")
 
         self.portfolio_vars = {}
@@ -448,6 +361,98 @@ class TradingAppGUI:
         except Exception as e:
             self.log_print(f"Error displaying plot: {e}")
 
+
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    # "Analysis / Plots" Tab
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    def _build_analysis_tab(self):
+        tab = ttk.Frame(self.nb, padding=10)
+        self.nb.add(tab, text="3. Analysis")
+        ttk.Label(tab, text="Select tickers to analyse or plot:").pack(anchor="w")
+
+        # Create the container frame ONCE
+        self.analysis_vars = {}
+        self.analysis_frame = ttk.Frame(tab)
+        self.analysis_frame.pack(fill="both", expand=True, padx=6, pady=4)
+        self._populate_analysis_checkboxes()
+
+        btn_frame = ttk.Frame(tab)
+        btn_frame.pack(fill="x", pady=10)
+        ttk.Button(btn_frame, text="Plot Relative Growth", command=self.plot_selected_growth).pack(side="left")
+        ttk.Button(btn_frame, text="Print Key Stats", command=self.print_selected_stats).pack(side="left", padx=10)
+        ttk.Button(btn_frame, text="Plot Yearly Returns", command=self.plot_selected_returns).pack(side="left", padx=10)
+
+    def _populate_analysis_checkboxes(self):
+        # Clear old widgets before repopulating
+        for widget in self.analysis_frame.winfo_children():
+            widget.destroy()
+        self.analysis_vars.clear()
+
+        canvas = tk.Canvas(self.analysis_frame)
+        scrollbar = ttk.Scrollbar(self.analysis_frame, orient="vertical", command=canvas.yview)
+        scrollable_frame = ttk.Frame(canvas)
+
+        scrollable_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        for ticker in sorted(self.instruments.keys()):
+            var = tk.BooleanVar(value=False)
+            cb = ttk.Checkbutton(scrollable_frame, text=ticker, variable=var)
+            cb.pack(anchor="w", padx=10, pady=2)
+            self.analysis_vars[ticker] = var
+
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+
+    def refresh_analysis_checkboxes(self):
+        self._populate_analysis_checkboxes()
+
+    def plot_selected_growth(self):
+        selected = self.get_selected_tickers(self.analysis_vars)
+        if not selected:
+            messagebox.showinfo("Selection Error", "Please select at least one ticker to plot.")
+            return
+        
+        inst_to_plot = {t: self.instruments[t] for t in selected}
+        self.log_print(f"\nPlotting growth for: {', '.join(selected)}")
+        TimeSeriesAnalysis.plot_all_growth(inst_to_plot)
+        plt.show()
+
+    def plot_selected_returns(self):
+        selected = self.get_selected_tickers(self.analysis_vars)
+        if not selected:
+            messagebox.showinfo("Selection Error", "Please select at least one ticker to plot.")
+            return
+        
+        inst_to_plot = {t: self.instruments[t] for t in selected}
+        self.log_print(f"\nPlotting returns for: {', '.join(selected)}")
+        TimeSeriesAnalysis.plot_all_returns(inst_to_plot)
+        plt.show()
+
+
+    def print_selected_stats(self):
+        selected = self.get_selected_tickers(self.analysis_vars)
+        if not selected:
+            messagebox.showinfo("Selection Error", "Please select at least one ticker.")
+            return
+
+        self.log_print("\n--- Key Statistics ---")
+        for t in selected:
+            inst = self.instruments[t]
+            self.log_print(
+                f"{t}: Sharpe={inst.sharpe_ratio():.3f}, "
+                f"CAGR={inst.compute_cagr():.2%}, "
+                f"Annual Vol={inst.annualised_return()[1]:.2%}, "
+                f"5Y Growth Prob={inst.growth_probability(5):.2%}, "
+                f"10Y Growth Prob={inst.growth_probability(10):.2%}, "
+                f"15Y Growth Prob={inst.growth_probability(15):.2%}, "
+            )
+
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     # "Simulation" Tab
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -491,7 +496,7 @@ class TradingAppGUI:
 
     def _build_compare_tab(self):
         tab = ttk.Frame(self.nb, padding=10)
-        self.nb.add(tab, text="5. Compare")
+        self.nb.add(tab, text="5. Simulation vs History")
         ttk.Label(tab, text="Compare historical performance against a simulation based on historical stats:").pack(anchor="w")
 
         self.compare_vars = {}
