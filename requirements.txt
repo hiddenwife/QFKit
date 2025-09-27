@@ -1,9 +1,9 @@
-yfinance
+PySide6
+matplotlib
 pandas
 numpy
-matplotlib
+pymc
+arviz
+yfinance
+plotly
 scipy
-statsmodels
-arch
-scikit-learn
-pmdarima
