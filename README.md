@@ -29,12 +29,14 @@ This toolkit empowers you to make data-driven investment decisions. Whether you'
 - **Integrated Portfolio Object**: Once created, a portfolio is treated as a distinct entity that can be passed directly to the simulation and forecasting modules for further analysis.
 
 **Stochastic Simulation Suite**:
+
 Run sophisticated Monte Carlo simulations to model future price paths.
 - **Geometric Brownian Motion (GBM)**: The industry standard for stock price simulation.
 - **Jump-Diffusion (Merton Model)**: Extends GBM to account for sudden, discontinuous price jumps (market shocks).
 - **Heston Stochastic Volatility Model**: A dual-process model where asset volatility itself is stochastic, capturing volatility clustering effects.
 
 **Bayesian Forecasting Engine**:
+
 This is the most powerful feature of the toolkit, leveraging the `PyMC` library for robust, probabilistic forecasting.
 - **Sophisticated Core Model**: An **Autoregressive (AR(p)) model with a Student-T likelihood**. This specification is chosen for its robustness in modeling the heavy-tailed nature of financial returns.
 - **Dual Inference Methods**:
@@ -50,23 +52,43 @@ This is the most powerful feature of the toolkit, leveraging the `PyMC` library 
 
 ## Project Structure
 financial_tools/
+
 ├── main.py
+
 ├── gui/
+
 │   ├── __init__.py
+
 │   ├── main_window.py
+
 │   └── tabs/
+
 │       ├── __init__.py
+
 │       ├── analysis_tab.py
+
 │       ├── compare_tab.py
+
 │       ├── forecast_tab.py
+
 │       ├── load_data_tab.py
+
 │       ├── portfolio_tab.py
+
 │       └── simulation_tab.py
+
 ├── src/
+
 │   ├── analysis.py
+
 │   ├── data_loader.py
+
 │   ├── forecast.py
+
 │   ├── portfolio.py
+
 │   └── simulation.py
+
 ├── requirements.txt
+
 └── README.md
