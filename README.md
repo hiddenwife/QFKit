@@ -17,26 +17,24 @@ The integrated workflow allows for rapid iteration between analysis, portfolio c
 This toolkit empowers you to make data-driven investment decisions. Whether you're a student, an investor, or a researcher, this tool provides a powerful, user-friendly platform to explore financial data.
 
 ## Core Features
-**Data loading & Analysis**: 
+### Data loading & Analysis: 
 - **Data Fetching**: Pulls historical OHLCV data via yfinance and computes log returns.
 - **Performance Metrics**: Calculates standard industry metrics including CAGR, annualised volatility, and Sharpe Ratio.
 - **Growth Probability Models**: Estimates the probability of future price increases over specified horizons using a lognormal price distribution model.
 
-**Portfolio Analytics** 
+### Portfolio Analytics
 - **Portfolio Construction**: Build weighted portfolios from any combination of loaded tickers. Weights are automatically normalised to construct a new portfolio time series.
 - **Risk Decomposition**: Generate correlation and covariance matrices for the portfolio's underlying assets.
 - **Variance Contribution Analysis**: Quantify each asset's percentage contribution to total portfolio variance.
 - **Integrated Portfolio Object**: Once created, a portfolio is treated as a distinct entity that can be passed directly to the simulation and forecasting modules for further analysis.
 
-**Stochastic Simulation Suite**:
-
+### Stochastic Simulation Suite:
 Run sophisticated Monte Carlo simulations to model future price paths.
 - **Geometric Brownian Motion (GBM)**: The industry standard for stock price simulation.
 - **Jump-Diffusion (Merton Model)**: Extends GBM to account for sudden, discontinuous price jumps (market shocks).
 - **Heston Stochastic Volatility Model**: A dual-process model where asset volatility itself is stochastic, capturing volatility clustering effects.
 
-**Bayesian Forecasting Engine**:
-
+### Bayesian Forecasting Engine:
 This is the most powerful feature of the toolkit, leveraging the `PyMC` library for robust, probabilistic forecasting.
 - **Sophisticated Core Model**: An **Autoregressive (AR(p)) model with a Student-T likelihood**. This specification is chosen for its robustness in modeling the heavy-tailed nature of financial returns.
 - **Dual Inference Methods**:
