@@ -63,19 +63,19 @@ financial_tools/
 
 │   └── tabs/
 
-│       ├── __init__.py
+│   │   ├── __init__.py
 
-│       ├── analysis_tab.py
+│   │   ├── analysis_tab.py
 
-│       ├── compare_tab.py
+│   │   ├── compare_tab.py
 
-│       ├── forecast_tab.py
+│   │   ├── forecast_tab.py
 
-│       ├── load_data_tab.py
+│   │   ├── load_data_tab.py
 
-│       ├── portfolio_tab.py
+│   │   ├── portfolio_tab.py
 
-│       └── simulation_tab.py
+│   │   └── simulation_tab.py
 
 ├── src/
 
