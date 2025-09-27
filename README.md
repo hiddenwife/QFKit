@@ -1,69 +1,72 @@
 # Financial Analysis & Simulation Toolkit
 
-A modular Python toolkit for **time-series analysis** and **Monte Carlo simulations** of stocks, ETFs, and indices using Yahoo Finance data, all easily traversable with a GUI.
+A modular Python toolkit for sophisticated **time-series analysis**, **portfolio construction**, **stochastic simulation**, and **Bayesian forecasting**. It leverages a responsive and intuitive GUI built with `PySide6` to make advanced quantitative tools accessible to everyone.
 
 ## Quick Start
+**Recommended**: Make a new virtual environment, then run:
 ```bash
 pip install -r requirements.txt
 python main.py
 ```
-**NOTE**: **pmdarima** (optional) may have installation issues. Only needed for auto-ARIMA functionality; the code runs without it.
 
 ## Overview and Usage
-To get started, simply input the tickers from Yahoo Finance (e.g., AAPL for Apple) into the designated section of the GUI. This toolkit is designed for analysing companies, funds, ETFs, and indices, making it particularly valuable for investors looking to make informed decisions about where to allocate their capital.
+This application provides a suite of tools for quantitative finance. Load financial tickers from Yahoo Finance, perform statistical analysis, construct and evaluate multi-asset portfolios, and project future performance using stochastic models and a Bayesian forecasting engine.
 
-One of the standout features of this toolkit is the ability to create a **weighted portfolio** of different funds. You can analyse how this portfolio has performed historically and use the built-in simulation tool to assess the likelihood of future growth. This allows you to compare the potential returns of various assets and make data-driven investment choices.
+The integrated workflow allows for rapid iteration between analysis, portfolio construction, and forecasting. The primary goal is to provide a robust platform for evaluating and comparing investment strategies based on quantitative metrics.
 
-Whether you're considering investments in shares or funds, this tool offers a quick and effective way to compare options, assess potential returns, and optimise your investment strategy.
+This toolkit empowers you to make data-driven investment decisions. Whether you're a student, an investor, or a researcher, this tool provides a powerful, user-friendly platform to explore financial data.
 
-## Features
-**Data loading**: 
-- Fetches OHLCV data via `yfinance`, computes log returns, handles invalid tickers gracefully.  
+## Core Features
+**Data loading & Analysis**: 
+- **Data Fetching**: Pulls historical OHLCV data via yfinance and computes log returns.
+- **Performance Metrics**: Calculates standard industry metrics including CAGR, annualised volatility, and Sharpe Ratio.
+- **Growth Probability Models**: Estimates the probability of future price increases over specified horizons using a lognormal price distribution model.
 
-**Analysis**: 
-- Annualised returns/volatility, Sharpe ratio, CAGR, Value-at-Risk, growth probabilities, rolling stats, moving averages, relative growth, return plots.  
+**Portfolio Analytics** 
+- **Portfolio Construction**: Build weighted portfolios from any combination of loaded tickers. Weights are automatically normalised to construct a new portfolio time series.
+- **Risk Decomposition**: Generate correlation and covariance matrices for the portfolio's underlying assets.
+- **Variance Contribution Analysis**: Quantify each asset's percentage contribution to total portfolio variance.
+- **Integrated Portfolio Object**: Once created, a portfolio is treated as a distinct entity that can be passed directly to the simulation and forecasting modules for further analysis.
 
-**Portfolio tools**: 
-- Quick creation of weighted portfolios from any combination of tickers.
-- Automatic normalisation of weights and construction of a portfolio price series.
-- Full analytics: covariance/correlation, annualised volatility, variance % contribution, cumulative return plots.
-- Use the portfolio like any other instrument: simulate, compare to real price history, or forecast.
+**Stochastic Simulation Suite**:
+Run sophisticated Monte Carlo simulations to model future price paths.
+- **Geometric Brownian Motion (GBM)**: The industry standard for stock price simulation.
+- **Jump-Diffusion (Merton Model)**: Extends GBM to account for sudden, discontinuous price jumps (market shocks).
+- **Heston Stochastic Volatility Model**: A dual-process model where asset volatility itself is stochastic, capturing volatility clustering effects.
 
-**Simulations**:
-- Geometric Brownian Motion (GBM) with thousands of paths, probability of finishing above current price, terminal price stats, visualised sample paths.  
-- Comparison between simulated data and real data with the mean and median simulated data plotted against real 'Close' data.
+**Bayesian Forecasting Engine**:
+This is the most powerful feature of the toolkit, leveraging the `PyMC` library for robust, probabilistic forecasting.
+- **Sophisticated Core Model**: An **Autoregressive (AR(p)) model with a Student-T likelihood**. This specification is chosen for its robustness in modeling the heavy-tailed nature of financial returns.
+- **Dual Inference Methods**:
+  - **Full MCMC (NUTS)**: Employs the No-U-Turn Sampler (a Hamiltonian Monte Carlo method) for the most accurate posterior estimation.
+  - **Fast ADVI**: Uses Automatic Differentiation Variational Inference for rapid model fitting when speed is a priority.
+- **Probabilistic Forecasts**: The output is a full posterior predictive distribution, not a single point estimate. This is visualised with **80% and 95% credible intervals** to quantify forecast uncertainty.
+- **Interactive Visuals**: Explore forecast results with interactive plots generated by `Plotly`.
 
-**Forecast**:
-- ARIMA+GARCH for price forecasting with volatility-adjusted confidence intervals and optional outlier removal.
-
-## GUI
-- Tabs for: Load Data, Analysis, Portfolio, Simulation, Compare, Forecast.
-- Multi‑select checkbox lists across tabs for intuitive selection.
-- Portfolio tab: assign weights next to each ticker, click "Create/Update Portfolio" to:
-  - build a portfolio ticker (normalised weighted price series),
-  - compute and show correlation/covariance, volatility and variance contributions,
-  - expose the portfolio in other tabs (simulate, compare, forecast) as a first‑class item.
-- All heavy computations run off the main thread; plotting and UI updates are scheduled on the main thread to keep the UI responsive.
+## GUI & Architecture
+- **Tabbed Interface**: Functionality is segmented into modules: Data Loading, Analysis, Portfolio, Simulation, and Forecasting.
+- **Asynchronous & Responsive UI**: All computationally heavy tasks (MCMC sampling, Monte Carlo simulations) are executed on background threads (`QThread`). This prevents the UI from freezing during analysis.
+- **Integrated Workflow**: The application architecture is designed to pass data objects (like a constructed portfolio) seamlessly between different analysis tabs.
 
 ## Project Structure
 financial_tools/
-
-├── main.py # Entry point
-
-├── gui.py # GUI for all analysis and plotting
-
+├── main.py
+├── gui/
+│   ├── __init__.py
+│   ├── main_window.py
+│   └── tabs/
+│       ├── __init__.py
+│       ├── analysis_tab.py
+│       ├── compare_tab.py
+│       ├── forecast_tab.py
+│       ├── load_data_tab.py
+│       ├── portfolio_tab.py
+│       └── simulation_tab.py
 ├── src/
-
-│ ├── data_loader.py # Fetch & preprocess data
-
-│ ├── analysis.py # FinancialInstrument & TimeSeriesAnalysis
-
-│ ├── simulation.py # Monte Carlo GBM simulation
-
-│ ├── portfolio.py # Portfolio analytics
-
-│ ├── forecast.py # Future forecasting
-
+│   ├── analysis.py
+│   ├── data_loader.py
+│   ├── forecast.py
+│   ├── portfolio.py
+│   └── simulation.py
 ├── requirements.txt
-
 └── README.md

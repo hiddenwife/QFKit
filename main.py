@@ -2,28 +2,19 @@
 About:
   Modular Python toolkit for ETF, fund, and portfolio analytics. 
   Integrates market data (yfinance) with time-series analysis, 
-  Monte Carlo (GBM) simulations, risk metrics, and ARIMA+GARCH forecasting, 
+  Monte Carlo (GBM) simulations, risk metrics, and Bayesian forecasting, 
   all accessible via an interactive GUI.
 
 Developer: Christopher Andrews
 GitHub: https://github.com/hiddenwife/financial_tools
 
+Read LICENCE for use of any of this code.
+
 """
 
 from gui import launch_gui
-from tkinter import TclError
 
-
-#stock_list = ["ACWI", "SPXL", "AAPL", "^GSPC", "^FTSE", "VWCE.DE"]
-print("This code will compare funds, ETFs, trackers etc from Yahoo Finance.")
-
-try:
+if __name__ == "__main__":
+    print("This code will compare funds, ETFs, trackers etc from Yahoo Finance.\n")
+    print("Launching Financial Analysis & Simulation Toolkit")
     launch_gui()
-    # exit after GUI closes
-    exit(0)
-except TclError as e:
-    print(f"Unable to launch GUI due to Tkinter issue. Check your installation. Issue: {e}")
-except ImportError as e:
-    print(f"Tkinter is not installed. Please install it to use the GUI. Issue: {e}")
-except Exception as e:
-    print(f"An unexpected error occurred while launching the GUI: {e}")

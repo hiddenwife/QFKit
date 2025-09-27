@@ -1,312 +1,260 @@
 # src/forecast.py
-"""
-Forecaster: ARIMA (mean) + GARCH (volatility) pipeline
 
-expects a pandas DataFrame with:
- - DatetimeIndex
- - 'Close' column
- - optional 'Log_Returns' column (if missing it's computed as log(close).diff())
-
-Primary API:
- - Forecaster(df)
- - .fit(arima_kwargs=None, garch_kwargs=None)
- - .forecast(steps=30, alpha=0.05) -> DataFrame with mean_forecast, lower_ci, upper_ci
- - .plot_forecast(steps=30, history=100)
-
-Design goals:
- - Safe defaults for use in interactive scripts
- - Handles missing dates by using business-day index for forecasts
- - Uses pmdarima.auto_arima when available (falls back to statsmodels.ARIMA if not) - issues with downloading it - numpy version?
- - Fits a GARCH model on ARIMA residuals using arch if available
- - Produces volatility-adjusted confidence intervals that grow with forecast horizon
-
-"""
-
-# Example: custom ARIMA and GARCH parameters
-# fc.fit(
-#     arima_kwargs={'order': (2, 0, 2)},  # ARIMA(p,d,q) for statsmodels fallback
-#     garch_kwargs={'p': 2, 'q': 2, 'vol': 'Garch', 'dist': 'normal'}
-# )
-
-
-from typing import Optional, Dict, Any, Tuple
-import warnings
+from typing import Optional
 
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import plotly.graph_objects as go
 
-# Optional imports - allow graceful errors with helpful messages
-try:
-    from pmdarima import auto_arima  # type: ignore
-    _HAS_PMD = True
-except Exception:
-    _HAS_PMD = False
+from scipy.stats import t as student_t
 
-try:
-    from arch import arch_model  # type: ignore
-    _HAS_ARCH = True
-except Exception:
-    _HAS_ARCH = False
-
-from statsmodels.tsa.stattools import adfuller
-from statsmodels.tsa.arima.model import ARIMA as SM_ARIMA  # fallback if pmdarima not present
-from scipy.stats import norm
+import pymc as pm
+import arviz as az
 
 
-warnings.filterwarnings("ignore")
-
-
-class Forecaster:
+class EpicBayesForecaster:
     """
-    ARIMA (mean) + GARCH (volatility) forecaster.
-
-    Args:
-        df: DataFrame with DatetimeIndex and 'Close'. If 'Log_Returns' missing it is calculated.
-        returns_col: name of the returns column (default 'Log_Returns').
+    A lightweight Bayesian forecaster:
+     - AR(p) mean process for returns
+     - Student-t likelihood for fat tails
+     - ADVI (fast) or NUTS (full MCMC)
     """
-    def __init__(self, df: pd.DataFrame, returns_col: str = "Log_Returns"):
+
+    def __init__(self, df: pd.DataFrame, returns_col="Log_Returns"):
         if not isinstance(df.index, pd.DatetimeIndex):
-            raise ValueError("DataFrame index must be a DatetimeIndex.")
-
-        if 'Close' not in df.columns:
-            raise ValueError("DataFrame must contain 'Close' column.")
+            raise ValueError("Index must be DatetimeIndex")
+        if "Close" not in df.columns:
+            raise ValueError("DataFrame must contain 'Close' column")
 
         self.df = df.sort_index().copy()
-        # ensure business-day frequency when possible
         if self.df.index.freq is None:
             try:
                 inferred = pd.infer_freq(self.df.index)
                 if inferred is not None:
                     self.df = self.df.asfreq(inferred)
                 else:
-                    # set to business day to avoid irregular forecasting index issues
-                    self.df = self.df.asfreq('B')
+                    self.df = self.df.asfreq("B")
             except Exception:
-                self.df = self.df.asfreq('B')
+                self.df = self.df.asfreq("B")
 
         self.returns_col = returns_col
         if returns_col not in self.df.columns:
-            self.df[returns_col] = np.log(self.df['Close']).diff()
+            self.df[returns_col] = np.log(self.df["Close"]).diff()
+        self.returns = self.df[returns_col].dropna().astype(float)
 
-        self.returns = self.df[returns_col].dropna()
+        self.model: Optional[pm.Model] = None
+        self.idata: Optional[az.InferenceData] = None
+        self.fitted = False
+        self.p = 0
 
-        # models / results
-        self.arima_model = None
-        self.garch_res = None
-        self.is_fitted = False
-
-    def _adf_stationary(self, series: pd.Series, alpha: float = 0.05) -> bool:
-        """Return True if series is stationary by ADF test (p <= alpha)."""
-        try:
-            pvalue = adfuller(series.dropna())[1]
-            return pvalue <= alpha
-        except Exception:
-            return False
-
-    def fit(self,
-            arima_kwargs: Optional[Dict[str, Any]] = None,
-            garch_kwargs: Optional[Dict[str, Any]] = None):
+    def fit(self, p=1, draws=1000, tune=1000, chains=4,
+            method="advi", target_accept=0.9, cores=1, random_seed=42,
+            advi_iter=20000):
         """
-        Fit ARIMA on returns, then GARCH on ARIMA residuals.
-
-        arima_kwargs: passed to auto_arima or statsmodels ARIMA fallback.
-            Examples:
-              {'start_p':0, 'start_q':0, 'max_p':5, 'max_q':5, 'seasonal':False, 'trace':False}
-        garch_kwargs: passed to arch_model(...).fit()
-            Examples:
-              {'p':1, 'q':1, 'vol':'Garch', 'dist':'t'}
+        Fit AR(p) + StudentT model. method='advi' (fast) or 'nuts' (full MCMC).
+        Returns arviz InferenceData (stored at self.idata).
         """
-        arima_kwargs = arima_kwargs or {}
-        garch_kwargs = garch_kwargs or {}
+        self.p = int(p)
+        r = self.returns.copy().dropna()
+        if len(r) < max(30, self.p + 10):
+            raise ValueError("Need >= 30 returns for stable fitting")
 
-        # ---- Fit ARIMA/auto_arima ----
-        print("Fitting ARIMA (mean model on returns)...")
-        # If pmdarima available, prefer it for stepwise auto-selection
-        if _HAS_PMD:
-            # let auto_arima decide differencing unless series is clearly stationary
-            d = 0 if self._adf_stationary(self.returns) else None
-            am_kwargs = dict(
-                y=self.returns,
-                start_p=arima_kwargs.get('start_p', 0),
-                start_q=arima_kwargs.get('start_q', 0),
-                max_p=arima_kwargs.get('max_p', 5),
-                max_q=arima_kwargs.get('max_q', 5),
-                seasonal=arima_kwargs.get('seasonal', False),
-                d=d,
-                trace=arima_kwargs.get('trace', False),
-                error_action='ignore',
-                suppress_warnings=True,
-                stepwise=arima_kwargs.get('stepwise', True)
-            )
-            # allow passing other args through
-            extra = {k: v for k, v in arima_kwargs.items() if k not in am_kwargs}
-            am_kwargs.update(extra)
-            self.arima_model = auto_arima(**am_kwargs)
-            # pmdarima returns forecasts on returns directly later via .predict
-            resid = self.arima_model.resid()
+        # Prepare design if p>0
+        if self.p > 0:
+            # X matrix of shape (T-p, p)
+            X = np.column_stack([
+                r.values[self.p - i - 1: len(r) - i - 1] for i in range(self.p)
+            ])
+            y = r.values[self.p:]
         else:
-            # fallback: fit a simple low-order ARIMA on returns using statsmodels
-            order = arima_kwargs.get('order', (3, 0, 3))
-            sm = SM_ARIMA(self.returns, order=order)
-            self.arima_model = sm.fit()
-            resid = self.arima_model.resid
+            X = None
+            y = r.values
 
-        # ---- Fit GARCH on residuals (volatility model) ----
-        if not _HAS_ARCH:
-            warnings.warn("arch package not available: GARCH volatility modeling skipped. Forecast CIs will use constant vol.")
-            self.garch_res = None
-        else:
-            print("Fitting GARCH on ARIMA residuals...")
-            # defaults
-            p = garch_kwargs.get('p', 1)
-            q = garch_kwargs.get('q', 1)
-            vol = garch_kwargs.get('vol', 'Garch')
-            dist = garch_kwargs.get('dist', 't')
-            am = arch_model(resid.dropna(), vol=vol, p=p, q=q, dist=dist)
-            self.garch_res = am.fit(disp='off')
-        self.is_fitted = True
-        print("Models fitted.")
-
-    def _forecast_arima_returns(self, steps: int, alpha: float) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-        """
-        Return (mean_returns, lower_returns, upper_returns) for next `steps` periods.
-        Values are (not cumulative) log-return forecasts per-step.
-        """
-        if _HAS_PMD and hasattr(self.arima_model, "predict"):
-            # pmdarima auto_arima
-            mean, conf = self.arima_model.predict(n_periods=steps, return_conf_int=True, alpha=alpha)
-            mean = np.asarray(mean)  # per-step (log) returns
-            lower = conf[:, 0]
-            upper = conf[:, 1]
-            return mean, lower, upper
-        else:
-            # statsmodels ARIMAResultsWrapper: get_forecast returns cumulative or per-step depending on model.
-            # For simplicity we use .get_forecast on the returns series.
-            pred = self.arima_model.get_forecast(steps=steps)
-            mean = pred.predicted_mean.values
-            ci = pred.conf_int(alpha=alpha)
-            lower = ci.iloc[:, 0].values
-            upper = ci.iloc[:, 1].values
-            return mean, lower, upper
-
-    def _forecast_garch_variance(self, steps: int) -> np.ndarray:
-        """
-        Return per-step forecast standard deviation (volatility) for residuals.
-        If GARCH not fitted, return constant sigma = historical std of residuals.
-        The returned array is per-step standard deviations (not variances).
-        """
-        if self.garch_res is None:
-            # fallback: use historical std of residuals
-            if _HAS_PMD and hasattr(self.arima_model, "resid"):
-                resid = np.asarray(self.arima_model.resid())
+        with pm.Model() as m:
+            mu0 = pm.Normal("mu0", mu=0.0, sigma=1.0)
+            if self.p > 0:
+                phi = pm.Normal("phi", mu=0.0, sigma=0.5, shape=self.p)
             else:
-                resid = np.asarray(self.arima_model.resid)
-            sigma = np.nanstd(resid)
-            return np.repeat(sigma, steps)
+                phi = None
+            sigma = pm.HalfNormal("sigma", sigma=1.0)
+            nu = pm.Exponential("nu", 1/10.0) + 2.0  # df > 2 for well-behaved t
+
+            if self.p > 0:
+                mu_t = mu0 + pm.math.dot(X, phi)
+            else:
+                mu_t = mu0
+
+            pm.StudentT("obs", nu=nu, mu=mu_t, sigma=sigma, observed=y)
+
+            self.model = m
+
+            if method.lower() in ("advi", "meanfield", "fullrank"):
+                # ADVI/variational inference -> returns approx then sample draws
+                approx = pm.fit(n=advi_iter, method="advi", random_seed=random_seed, progressbar=False)
+                self.idata = approx.sample(draws=draws)
+            else:
+                # NUTS MCMC
+                self.idata = pm.sample(draws=draws, tune=tune, chains=chains, cores=cores,
+                                       target_accept=target_accept, random_seed=random_seed, progressbar=False)
+
+            self.fitted = True
+
+        return self.idata
+
+    def _flatten_posterior(self, varname: str):
+        """
+        Extract a posterior variable from arviz InferenceData and flatten to shape (n_draws, ...)
+        Returns numpy array with shape (n_total_draws, *var_shape_after_sample)
+        """
+        post = self.idata.posterior
+        if varname not in post:
+            raise KeyError(f"Variable '{varname}' not found in posterior")
+        arr = post[varname].values  # shape (chain, draw, *shape)
+        # Ensure last dims exist
+        flat = arr.reshape((-1,) + arr.shape[2:])
+        return flat  # (n_total_draws, ...)
+
+    def forecast(self, steps=30, draws=500, random_seed=42):
+        """
+        Posterior predictive simulation of future prices.
+        Returns DataFrame with median and CI columns indexed by business days.
+        """
+        if not self.fitted:
+            raise RuntimeError("Call .fit() first")
+
+        post = self.idata.posterior
+        rng = np.random.default_rng(random_seed)
+
+        n_chains = post.sizes["chain"]
+        n_draws = post.sizes["draw"]
+        n_total = n_chains * n_draws
+        draws = int(min(draws, n_total))
+
+        # select draw indices (flatten chain,draw)
+        all_idx = np.arange(n_total)
+        sel_idx = rng.choice(all_idx, size=draws, replace=True)
+
+        # Flatten parameters robustly
+        mu0_all = self._flatten_posterior("mu0").squeeze()  # shape (n_total,)
+        mu0 = mu0_all[sel_idx]
+
+        nu_all = self._flatten_posterior("nu").squeeze()
+        nu = nu_all[sel_idx]
+
+        sigma_all = self._flatten_posterior("sigma").squeeze()
+        sigma = sigma_all[sel_idx]
+
+        if self.p > 0:
+            # phi may be (n_total, p) or (n_total,) if p==1 depending on trace shape.
+            phi_all = self._flatten_posterior("phi")
+            # ensure it's 2D with shape (n_total, p)
+            if phi_all.ndim == 1:
+                phi_all = phi_all[:, None]
+            phi = phi_all[sel_idx, :]
         else:
-            # arch model: use .forecast to get variance forecasts
-            fcast = self.garch_res.forecast(horizon=steps, reindex=False)
-            # fcast.variance is a DataFrame with cols 1..steps. take last row
-            try:
-                var_vals = fcast.variance.iloc[-1].values
-                # sometimes returns shape (steps,) or (1, steps)
-                var_vals = np.asarray(var_vals, dtype=float)
-                # standard deviations
-                return np.sqrt(var_vals)
-            except Exception:
-                # fallback to repeating last in-sample vol
-                in_sample_sigma = np.nanstd(self.garch_res.std_resid)
-                return np.repeat(in_sample_sigma, steps)
+            phi = None
 
-    def forecast(self, steps: int = 30, alpha: float = 0.05) -> pd.DataFrame:
-        """
-        Forecast price for `steps` future periods.
+        # Simulation loop
+        S0 = float(self.df["Close"].iloc[-1])
+        prices = np.zeros((draws, steps), dtype=float)
 
-        Returns DataFrame indexed by business days starting next trading day with columns:
-          - mean_forecast: point estimate of price
-          - lower_ci, upper_ci: volatility-adjusted confidence interval (alpha default 0.05 -> 95% CI)
-        """
-        if not self.is_fitted:
-            raise RuntimeError("Call .fit() before .forecast().")
+        # last observed returns (for AR initialization)
+        if self.p > 0:
+            last_r = list(self.returns.values[-self.p:])
+        else:
+            last_r = []
 
-        # get per-step return forecasts and per-step return CI from ARIMA
-        mean_r, lower_r, upper_r = self._forecast_arima_returns(steps=steps, alpha=alpha)
+        for i_draw in range(draws):
+            price = S0
+            r_hist = list(last_r)
+            mu0_i = mu0[i_draw]
+            nu_i = float(nu[i_draw])
+            sigma_i = float(sigma[i_draw])
+            if self.p > 0:
+                phi_i = phi[i_draw, :]
 
-        # forecast residual volatility (std per-step)
-        sigma_steps = self._forecast_garch_variance(steps=steps)
+            for t in range(steps):
+                if self.p > 0:
+                    # use most recent p returns (last element is most recent)
+                    recent = np.array(r_hist[-self.p:]) if len(r_hist) >= self.p else np.array([0.0] * self.p)
+                    mu_t = mu0_i + np.dot(phi_i, recent[::-1]) if recent.size > 0 else mu0_i
+                else:
+                    mu_t = mu0_i
 
-        # Combine: compute cumulative log-return forecast and CI using volatility
-        # cumulative_mean is cumulative sum of per-step mean log returns
-        cum_mean = np.cumsum(mean_r)
+                # draw Student-t standardized and scale
+                t_std = rng.standard_t(df=float(nu_i))
+                ret = mu_t + sigma_i * t_std
 
-        # For volatility we assume independent-step vol generated by GARCH vols: cumulative variance = sum(sigma_i^2)
-        cum_var = np.cumsum(sigma_steps ** 2)
-        cum_std = np.sqrt(cum_var)
+                # update price
+                price = price * np.exp(ret)
+                prices[i_draw, t] = price
 
-        # z for two-sided CI
-        z = norm.ppf(1 - alpha / 2.0)
+                # update history
+                if self.p > 0:
+                    r_hist.append(ret)
+                    if len(r_hist) > self.p:
+                        # keep only last p
+                        r_hist = r_hist[-self.p:]
 
-        # last observed price
-        S0 = float(self.df['Close'].iloc[-1])
+        fc = {
+            "median": np.median(prices, axis=0),
+            "lower_95": np.percentile(prices, 2.5, axis=0),
+            "upper_95": np.percentile(prices, 97.5, axis=0),
+            "lower_80": np.percentile(prices, 10, axis=0),
+            "upper_80": np.percentile(prices, 90, axis=0),
+        }
 
-        mean_price = S0 * np.exp(cum_mean)
-        lower_price = S0 * np.exp(cum_mean - z * cum_std)
-        upper_price = S0 * np.exp(cum_mean + z * cum_std)
-
-        # Build forecast index starting next business day after last real date
         last_date = self.df.index[-1]
         try:
-            start = last_date + pd.Timedelta(days=1)
-            idx = pd.bdate_range(start=start, periods=steps)
+            idx = pd.bdate_range(start=last_date + pd.Timedelta(days=1), periods=steps)
         except Exception:
             idx = pd.RangeIndex(start=0, stop=steps)
 
-        forecast_df = pd.DataFrame({
-            'mean_forecast': mean_price,
-            'lower_ci': lower_price,
-            'upper_ci': upper_price
-        }, index=idx)
+        return pd.DataFrame(fc, index=idx)
 
-        return forecast_df
+    def plot_forecast_matplotlib(self, steps=30, draws=500, history=200):
+        fc = self.forecast(steps=steps, draws=draws)
+        hist = self.df["Close"].iloc[-history:]
 
-    def plot_forecast(self, steps: int = 30, history: int = 100, alpha: float = 0.05, figsize: Tuple[int, int] = (12, 6)):
-        """
-        Plot historical close prices (last `history` points) and forecast with CI.
-        """
-        if not self.is_fitted:
-            raise RuntimeError("Call .fit() before .plot_forecast().")
+        fig, ax = plt.subplots(figsize=(10, 5))
+        ax.plot(hist.index, hist.values, label="History", color="black")
+        ax.plot(fc.index, fc["median"], label="Median Forecast", linestyle="--", color="blue")
+        ax.fill_between(fc.index, fc["lower_95"], fc["upper_95"],
+                        color="skyblue", alpha=0.3, label="95% CI")
+        ax.fill_between(fc.index, fc["lower_80"], fc["upper_80"],
+                        color="dodgerblue", alpha=0.3, label="80% CI")
+        ax.legend()
+        ax.set_title("Bayesian Forecast")
+        ax.grid(True, linestyle="--", alpha=0.6)
+        return fig
 
-        fc = self.forecast(steps=steps, alpha=alpha)
-        hist = self.df['Close'].iloc[-history:]
+    def plot_forecast_interactive(self, steps=30, draws=500, history=200):
+        fc = self.forecast(steps=steps, draws=draws)
+        hist = self.df["Close"].iloc[-history:]
 
-        plt.figure(figsize=figsize)
-        plt.plot(hist.index, hist.values, label='Historical', color='black')
-        plt.plot(fc.index, fc['mean_forecast'], label='Forecast', color='blue', linestyle='--')
-        plt.fill_between(fc.index, fc['lower_ci'], fc['upper_ci'], color='skyblue', alpha=0.4, label=f'{int((1-alpha)*100)}% CI')
-        plt.title(f'Price forecast ({steps} steps) — last {history} history shown')
-        plt.xlabel('Date')
-        plt.ylabel('Price')
-        plt.legend()
-        plt.grid(True, which='both', linestyle='--', linewidth=0.5)
-        plt.tight_layout()
-        plt.show()
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(x=hist.index, y=hist.values,
+                                 mode="lines", name="History", line=dict(color="black")))
+        fig.add_trace(go.Scatter(x=fc.index, y=fc["median"],
+                                 mode="lines", name="Forecast Median",
+                                 line=dict(color="blue", dash="dash")))
+        # 95% CI
+        fig.add_trace(go.Scatter(x=fc.index, y=fc["upper_95"],
+                                 mode="lines", line=dict(width=0), showlegend=False))
+        fig.add_trace(go.Scatter(x=fc.index, y=fc["lower_95"],
+                                 mode="lines", fill="tonexty", name="95% CI",
+                                 line=dict(width=0), fillcolor="rgba(135,206,250,0.3)"))
+        # 80% CI
+        fig.add_trace(go.Scatter(x=fc.index, y=fc["upper_80"],
+                                 mode="lines", line=dict(width=0), showlegend=False))
+        fig.add_trace(go.Scatter(x=fc.index, y=fc["lower_80"],
+                                 mode="lines", fill="tonexty", name="80% CI",
+                                 line=dict(width=0), fillcolor="rgba(30,144,255,0.25)"))
+
+        fig.update_layout(title="Bayesian Forecast (Interactive)",
+                          xaxis_title="Date", yaxis_title="Price",
+                          template="plotly_white", hovermode="x unified")
+        return fig
 
 
-def preprocess_and_forecast(df: pd.DataFrame, steps: int = 30, alpha: float = 0.05, returns_col: str = "Log_Returns"):
-    """
-    Preprocess the data by filtering out returns outside 3 standard deviations,
-    then fit the Forecaster model and plot the forecast.
-
-    df: DataFrame with DatetimeIndex and 'Close' column.
-    steps: number of steps to forecast.
-    alpha: significance level for confidence intervals.
-    returns_col: name of the returns column (default 'Log_Returns').
-    """
-    returns = np.log(df['Close']).diff().dropna()
-    # Remove returns outside 3 standard deviations
-    filtered_returns = returns[(np.abs(returns - returns.mean()) < 3 * returns.std())]
-    filtered_df = df.loc[filtered_returns.index]
-    fc = Forecaster(filtered_df, returns_col=returns_col)
-    fc.fit()
-    fc.plot_forecast(steps=steps, alpha=alpha)

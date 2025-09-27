@@ -1,0 +1,520 @@
+# gui/tabs/forecast_tab.py
+from PySide6.QtWidgets import (
+    QWidget, QVBoxLayout, QLabel, QScrollArea, QFrame,
+    QHBoxLayout, QCheckBox, QMessageBox, QDialog, QSlider,
+    QPushButton, QComboBox, QSpinBox, QSplitter, QLineEdit
+)
+from PySide6.QtCore import Slot, Qt, QObject, QThread, Signal
+from PySide6.QtGui import QIntValidator
+from PySide6.QtWebEngineWidgets import QWebEngineView
+from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
+import traceback
+import functools
+import multiprocessing
+
+from src.forecast import EpicBayesForecaster  # your Bayesian forecaster class
+
+
+# Worker used to run fitting in a background thread
+class Worker(QObject):
+    finished = Signal()
+    error = Signal(str)
+    result = Signal(str, object)  # ticker + forecaster object
+
+    def __init__(self, fn, ticker):
+        super().__init__()
+        self.fn = fn
+        self.ticker = ticker
+
+    @Slot()
+    def run(self):
+        try:
+            out = self.fn()
+            self.result.emit(self.ticker, out)
+        except Exception:
+            self.error.emit(traceback.format_exc())
+        finally:
+            self.finished.emit()
+
+
+class ForecastTab(QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.main_window = parent
+        self.forecast_checks = {}
+        self.status_labels = {}
+        self.running_threads = []
+        self._setup_ui()
+        self._build_forecast_controls()
+
+
+    def _setup_ui(self):
+        root = QVBoxLayout(self)
+        root.setContentsMargins(8, 8, 8, 8)
+        root.setSpacing(8)
+
+        root.addWidget(QLabel("Select tickers for Bayesian Forecast:"))
+
+        splitter = QSplitter(Qt.Vertical)
+
+        # --- Scroll area for ticker selection ---
+        self.scroll = QScrollArea()
+        self.scroll.setWidgetResizable(True)
+        self.scroll_widget = QFrame()
+        self.scroll_layout = QVBoxLayout(self.scroll_widget)
+        self.scroll_widget.setLayout(self.scroll_layout)
+        self.scroll.setWidget(self.scroll_widget)
+        splitter.addWidget(self.scroll)
+
+        # --- Parameter controls container ---
+        params_container = QFrame()
+        params_layout = QVBoxLayout(params_container)
+
+        # --- Forecast horizon ---
+        horizon_row = QHBoxLayout()
+        horizon_row.addWidget(QLabel("Forecast horizon (days):"))
+        self.horizon_slider = QSlider(Qt.Horizontal)
+        self.horizon_slider.setMinimum(5)
+        self.horizon_slider.setMaximum(252)
+        self.horizon_slider.setSingleStep(2)
+        self.horizon_slider.setPageStep(2)
+        self.horizon_slider.setTickInterval(10)
+        self.horizon_slider.setValue(60)
+        self.horizon_slider.setTickPosition(QSlider.TicksBelow)
+        self.horizon_label = QLabel(str(self.horizon_slider.value()))
+        self.horizon_slider.valueChanged.connect(lambda v: self._snap_horizon_slider(v))
+        horizon_row.addWidget(self.horizon_slider, stretch=1)
+        horizon_row.addWidget(self.horizon_label)
+        params_layout.addLayout(horizon_row)
+
+        # --- AR order ---
+        ar_row = QHBoxLayout()
+        ar_row.addWidget(QLabel("AR Order (p):"))
+        self.ar_spin = QSpinBox()
+        self.ar_spin.setMinimum(0)
+        self.ar_spin.setMaximum(6)
+        self.ar_spin.setValue(1)
+        ar_row.addWidget(self.ar_spin)
+        params_layout.addLayout(ar_row)
+
+        # --- Posterior Draws slider ---
+        self.draws_parent = QHBoxLayout()
+        self.draws_parent.addWidget(QLabel("Posterior Draws:"))
+
+        self.draws_slider = QSlider(Qt.Horizontal)
+        self.draws_slider.setMinimum(100)
+        self.draws_slider.setMaximum(10000)
+        self.draws_slider.setSingleStep(100)
+        self.draws_slider.setPageStep(100)
+        self.draws_slider.setTickInterval(100)
+        self.draws_slider.setValue(1000)
+        self.draws_label = QLabel(str(self.draws_slider.value()))
+        self.draws_slider.valueChanged.connect(lambda v: self._snap_draws_slider(v))
+        self.draws_parent.addWidget(self.draws_slider, stretch=1)
+        self.draws_parent.addWidget(self.draws_label)
+        params_layout.addLayout(self.draws_parent)
+
+        # --- Custom Draws input (hidden by default) ---
+        self.draws_custom_parent = QHBoxLayout()
+        self.draws_custom_parent.addWidget(QLabel("Posterior Draws (custom):"))
+        self.draws_input = QLineEdit()
+        self.draws_input.setPlaceholderText("Enter integer draws")
+        self.draws_input.setValidator(QIntValidator(100, 10_000_000, self))  # min=100
+        self.draws_custom_parent.addWidget(self.draws_input, stretch=1)
+        params_layout.addLayout(self.draws_custom_parent)
+        for i in range(self.draws_custom_parent.count()):
+            self.draws_custom_parent.itemAt(i).widget().setVisible(False)
+
+        # --- Inference method ---
+        method_row = QHBoxLayout()
+        method_row.addWidget(QLabel("Inference Method:"))
+        self.method_combo = QComboBox()
+        self.method_combo.addItems(["Fast (ADVI)", "Full (NUTS)"])
+        method_row.addWidget(self.method_combo)
+        params_layout.addLayout(method_row)
+
+        try:
+            self.cpu_count = multiprocessing.cpu_count()
+        except NotImplementedError:
+            self.cpu_count = 1
+
+        # --- Cores slider ---
+        self.cores_parent = QHBoxLayout()
+        self.cores_label_prefix = QLabel(f"Number of cores to use (max {self.cpu_count - 1}):")
+        self.cores_slider = QSlider(Qt.Horizontal)
+        self.cores_slider.setMinimum(1)
+        self.cores_slider.setMaximum(max(1, self.cpu_count - 1))
+        self.cores_slider.setSingleStep(1)
+        self.cores_slider.setValue(1)
+        self.cores_label = QLabel(str(self.cores_slider.value()))
+        self.cores_parent.addWidget(self.cores_label_prefix)
+        self.cores_parent.addWidget(self.cores_slider, stretch=1)
+        self.cores_parent.addWidget(self.cores_label)
+
+        self.cores_container = QFrame()
+        self.cores_container.setLayout(self.cores_parent)
+        self.cores_container.setVisible(False)
+        params_layout.addWidget(self.cores_container)
+
+        # --- Chains slider ---
+        self.chains_parent = QHBoxLayout()
+        self.chains_parent.addWidget(QLabel("Chains for NUTS:"))
+        self.chains_slider = QSlider(Qt.Horizontal)
+        self.chains_slider.setMinimum(4)
+        self.chains_slider.setMaximum(10)
+        self.chains_slider.setSingleStep(1)
+        self.chains_slider.setValue(4)
+        self.chains_label = QLabel(str(self.chains_slider.value()))
+        self.chains_parent.addWidget(self.chains_slider, stretch=1)
+        self.chains_parent.addWidget(self.chains_label)
+        params_layout.addLayout(self.chains_parent)
+
+        # --- Custom chains input (hidden by default) ---
+        self.chains_custom_parent = QHBoxLayout()
+        self.chains_custom_parent.addWidget(QLabel("Chains (custom):"))
+        self.chains_input = QLineEdit()
+        self.chains_input.setPlaceholderText("Enter integer chains")
+        self.chains_input.setValidator(QIntValidator(4, 10_000_000, self))  # min=4
+        self.chains_custom_parent.addWidget(self.chains_input, stretch=1)
+        params_layout.addLayout(self.chains_custom_parent)
+        for i in range(self.chains_custom_parent.count()):
+            self.chains_custom_parent.itemAt(i).widget().setVisible(False)
+
+        self.more_draws_checkbox = QCheckBox("I want more draws + chains")
+        self.more_draws_checkbox.setVisible(False)
+        params_layout.addWidget(self.more_draws_checkbox)
+
+        # --- Slider Callbacks ---
+        def update_cores_max(chains_value):
+            """Set cores slider max = min(chains_value, cpu_count-1)."""
+            max_cores = min(chains_value, self.cpu_count - 1)
+            self.cores_slider.setMaximum(max_cores)
+            self.cores_label_prefix.setText(f"Number of processors to use (max {max_cores}):")
+            if self.cores_slider.value() > max_cores:
+                self.cores_slider.setValue(max_cores)
+
+        def on_chains_changed(value):
+            self.chains_label.setText(str(value))
+            update_cores_max(value)
+
+        def on_cores_changed(value):
+            self.cores_label.setText(str(value))
+
+        self.chains_slider.valueChanged.connect(on_chains_changed)
+        self.cores_slider.valueChanged.connect(on_cores_changed)
+
+        # --- When custom chain input changes, update cores max too ---
+        def on_custom_chains_changed():
+            text = self.chains_input.text()
+            if text.isdigit():
+                update_cores_max(int(text))
+
+        self.chains_input.textChanged.connect(lambda _: on_custom_chains_changed())
+
+        on_chains_changed(self.chains_slider.value())
+
+        # --- Toggle helpers for default/custom draws & chains ---
+        def _show_default_draws_widgets():
+            self.draws_slider.setVisible(True)
+            self.draws_label.setVisible(True)
+            for i in range(self.draws_custom_parent.count()):
+                self.draws_custom_parent.itemAt(i).widget().setVisible(False)
+            self.draws_parent.itemAt(0).widget().setVisible(True)
+
+        def _show_custom_draws_widgets():
+            self.draws_slider.setVisible(False)
+            self.draws_label.setVisible(False)
+            for i in range(self.draws_custom_parent.count()):
+                self.draws_custom_parent.itemAt(i).widget().setVisible(True)
+            self.draws_parent.itemAt(0).widget().setVisible(False)
+
+        def _show_default_chains_widgets():
+            self.chains_slider.setVisible(True)
+            self.chains_label.setVisible(True)
+            for i in range(self.chains_custom_parent.count()):
+                self.chains_custom_parent.itemAt(i).widget().setVisible(False)
+            self.chains_parent.itemAt(0).widget().setVisible(True)
+
+        def _show_custom_chains_widgets():
+            self.chains_slider.setVisible(False)
+            self.chains_label.setVisible(False)
+            for i in range(self.chains_custom_parent.count()):
+                self.chains_custom_parent.itemAt(i).widget().setVisible(True)
+            self.chains_parent.itemAt(0).widget().setVisible(False)
+
+        def chains_row_enable(enable: bool):
+            for i in range(self.chains_parent.count()):
+                self.chains_parent.itemAt(i).widget().setVisible(enable)
+            for i in range(self.chains_custom_parent.count()):
+                self.chains_custom_parent.itemAt(i).widget().setVisible(enable and self.more_draws_checkbox.isChecked())
+
+        self._show_default_draws_widgets = _show_default_draws_widgets
+        self._show_custom_draws_widgets = _show_custom_draws_widgets
+        self._show_default_chains_widgets = _show_default_chains_widgets
+        self._show_custom_chains_widgets = _show_custom_chains_widgets
+        self.chains_row_enable = chains_row_enable
+
+        def on_method_changed(txt):
+            is_nuts = "NUTS" in txt.upper()
+            self.more_draws_checkbox.setVisible(is_nuts)
+            self.cores_container.setVisible(is_nuts) 
+            if is_nuts:
+                self.chains_row_enable(True)
+                _show_default_chains_widgets()
+            else:
+                self.more_draws_checkbox.setChecked(False)
+                self.chains_row_enable(False)
+                for i in range(self.chains_parent.count()):
+                    self.chains_parent.itemAt(i).widget().setVisible(False)
+                for i in range(self.chains_custom_parent.count()):
+                    self.chains_custom_parent.itemAt(i).widget().setVisible(False)
+
+        self.method_combo.currentTextChanged.connect(on_method_changed)
+
+        def on_more_draws_toggled(checked):
+            if checked:
+                _show_custom_draws_widgets()
+                _show_custom_chains_widgets()
+            else:
+                _show_default_draws_widgets()
+                _show_default_chains_widgets()
+
+        self.more_draws_checkbox.toggled.connect(on_more_draws_toggled)
+
+        _show_default_draws_widgets()
+        _show_default_chains_widgets()
+
+        # --- Plot type ---
+        plot_row = QHBoxLayout()
+        plot_row.addWidget(QLabel("Plot Type:"))
+        self.plot_type = QComboBox()
+        self.plot_type.addItems(["Interactive (Plotly)", "Static (Matplotlib)"])
+        plot_row.addWidget(self.plot_type)
+        params_layout.addLayout(plot_row)
+
+        # --- Run button ---
+        btn_row = QHBoxLayout()
+        self.run_forecast_btn = QPushButton("Run Forecast")
+        self.run_forecast_btn.clicked.connect(self.run_forecast_for_selected)
+        btn_row.addWidget(self.run_forecast_btn)
+        self.global_status = QLabel("")
+        btn_row.addWidget(self.global_status, stretch=1)
+        params_layout.addLayout(btn_row)
+
+        params_container.setLayout(params_layout)
+        splitter.addWidget(params_container)
+
+        on_method_changed(self.method_combo.currentText())
+        root.addWidget(splitter, stretch=1)
+
+    # ---------------- Utility Helpers ----------------
+    def log_print(self, msg: str):
+        if hasattr(self.main_window, "log_message"):
+            self.main_window.log_message(msg)
+        else:
+            print(msg)
+
+    def _available_tickers(self):
+        instruments = getattr(self.main_window, "instruments", {}) or {}
+        return sorted(instruments.keys())
+
+    def _clear_forecast_list(self):
+        for i in reversed(range(self.scroll_layout.count())):
+            item = self.scroll_layout.itemAt(i)
+            w = item.widget()
+            if w:
+                w.setParent(None)
+        self.forecast_checks.clear()
+        self.status_labels.clear()
+
+    def _build_forecast_controls(self):
+        self._clear_forecast_list()
+        tickers = self._available_tickers()
+        if not tickers:
+            self.scroll_layout.addWidget(QLabel("No instruments loaded. Load data first."))
+            return
+
+        for ticker in tickers:
+            row = QHBoxLayout()
+            cb = QCheckBox(ticker)
+            row.addWidget(cb)
+            status = QLabel("")
+            status.setFixedWidth(180)
+            row.addWidget(status)
+
+            container = QFrame()
+            container.setLayout(row)
+            self.scroll_layout.addWidget(container)
+            self.forecast_checks[ticker] = cb
+            self.status_labels[ticker] = status
+
+        self.scroll_layout.addStretch(1)
+
+    def refresh_instruments(self):
+        self._build_forecast_controls()
+
+    def _get_selected_tickers(self):
+        return [t for t, cb in self.forecast_checks.items() if cb.isChecked()]
+
+    def _snap_draws_slider(self, raw_value: int):
+        step = 100
+        snapped = int(round(raw_value / step) * step)
+        snapped = max(100, min(10000, snapped))
+        if snapped != raw_value:
+            self.draws_slider.blockSignals(True)
+            self.draws_slider.setValue(snapped)
+            self.draws_slider.blockSignals(False)
+        self.draws_label.setText(str(snapped))
+
+    def _snap_horizon_slider(self, raw_value: int):
+        step = 2
+        snapped = int(round(raw_value / step) * step)
+        snapped = max(5, min(252, snapped))
+        if snapped != raw_value:
+            self.horizon_slider.blockSignals(True)
+            self.horizon_slider.setValue(snapped)
+            self.horizon_slider.blockSignals(False)
+        self.horizon_label.setText(str(snapped))
+
+    # ---------------- Thread helper ----------------
+    def _run_task_in_thread(self, fn, ticker, result_slot):
+        thread = QThread()
+        worker = Worker(fn, ticker)
+        worker.moveToThread(thread)
+
+        worker.result.connect(result_slot)
+        worker.error.connect(lambda err: self._on_worker_error(ticker, err))
+        worker.finished.connect(thread.quit)
+        worker.finished.connect(worker.deleteLater)
+        thread.finished.connect(thread.deleteLater)
+
+        self.running_threads.append((thread, worker))
+        thread.finished.connect(lambda: self.running_threads.remove((thread, worker)))
+
+        thread.started.connect(worker.run)
+        thread.start()
+
+    def _on_worker_error(self, ticker, tb):
+        self.log_print(f"[{ticker}] Worker ERROR:\n{tb}")
+        lbl = self.status_labels.get(ticker)
+        if lbl:
+            lbl.setText("Error")
+        self._maybe_enable_run_button()
+
+    # ---------------- Main entry ----------------
+    def run_forecast_for_selected(self):
+        selected = self._get_selected_tickers()
+        if not selected:
+            QMessageBox.information(self, "Selection Error", "Please select at least one ticker.")
+            return
+
+        steps = int(self.horizon_slider.value())
+        p = int(self.ar_spin.value())
+        plot_type = self.plot_type.currentText()
+        method = "advi" if "ADVI" in self.method_combo.currentText() else "nuts"
+
+        # If user wants custom draws/chains, read from QLineEdit instead of sliders
+        if self.more_draws_checkbox.isChecked():
+            try:
+                draws = max(100, int(self.draws_input.text()))
+            except ValueError:
+                draws = 100
+
+            try:
+                chains = max(4, int(self.chains_input.text()))
+            except ValueError:
+                chains = 4
+        else:
+            draws = int(self.draws_slider.value())
+            chains = int(self.chains_slider.value())
+
+        cores = int(self.cores_slider.value())
+
+        self.run_forecast_btn.setEnabled(False)
+        status = "Running forecasts..."
+        statement = f"\nParameters: \n AR Order: {p} \n Plot Type: {plot_type} \n Method: {method} \n Posterior Draws: {draws} \n "
+        if "nuts" in method:
+            status += " (this may take a while)"
+            statement += f"Chains: {chains} \n Processors: {cores}\n"
+        self.global_status.setText(status)
+
+        for ticker in selected:
+            inst = self.main_window.instruments.get(ticker)
+            if inst is None:
+                self.log_print(f"Skipping {ticker}: no data.")
+                continue
+
+            lbl = self.status_labels.get(ticker)
+            if lbl:
+                lbl.setText("Fitting...")
+
+            def task_fit(df=inst.df):
+                fc = EpicBayesForecaster(df)
+                self.log_print(statement)
+                self.log_print("Don't worry about pytensor errors!")
+                fc.fit(p=p, draws=draws, method=method, tune=max(100, draws // 2),
+                       chains=chains, cores=cores, random_seed=42)
+                return fc
+
+            bound_fn = functools.partial(task_fit)
+            self._run_task_in_thread(bound_fn, ticker, self._on_worker_result)
+
+    @Slot(str, object)
+    def _on_worker_result(self, ticker, forecaster):
+        try:
+            lbl = self.status_labels.get(ticker)
+            if lbl:
+                lbl.setText("Plotting...")
+                self.global_status.setText("Opening plot... Done!")
+
+            steps = int(self.horizon_slider.value())
+            if self.plot_type.currentText().startswith("Interactive"):
+                fig = forecaster.plot_forecast_interactive(steps=steps)
+                self._show_plotly_in_dialog(fig, title=f"Forecast: {ticker}")
+            else:
+                fig = forecaster.plot_forecast_matplotlib(steps=steps)
+                self._show_matplotlib_in_dialog(fig, title=f"Forecast: {ticker}")
+
+            if lbl:
+                lbl.setText("Done")
+            self.log_print(f"[{ticker}] Forecast complete.")
+        except Exception:
+            self.log_print(f"[{ticker}] Plotting error:\n{traceback.format_exc()}")
+            lbl = self.status_labels.get(ticker)
+            if lbl:
+                lbl.setText("Plot error")
+        finally:
+            self._maybe_enable_run_button()
+
+    def _maybe_enable_run_button(self):
+        if not self.running_threads:
+            self.run_forecast_btn.setEnabled(True)
+            self.global_status.setText("")
+
+    # ---------------- Plot helpers ----------------
+    def _show_plotly_in_dialog(self, fig, title="Forecast"):
+        try:
+            html = fig.to_html(include_plotlyjs="cdn")
+            dialog = QDialog(self)
+            dialog.setWindowTitle(title)
+            layout = QVBoxLayout(dialog)
+            view = QWebEngineView()
+            view.setHtml(html)
+            layout.addWidget(view)
+            dialog.resize(900, 650)
+            dialog.exec()
+        except Exception:
+            self.log_print(f"Plotly display failed:\n{traceback.format_exc()}")
+
+    def _show_matplotlib_in_dialog(self, fig, title="Forecast"):
+        try:
+            dialog = QDialog(self)
+            dialog.setWindowTitle(title)
+            layout = QVBoxLayout(dialog)
+            canvas = FigureCanvas(fig)
+            layout.addWidget(canvas)
+            dialog.resize(900, 650)
+            canvas.draw()
+            dialog.exec()
+        except Exception:
+            self.log_print(f"Matplotlib display failed:\n{traceback.format_exc()}")

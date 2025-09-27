@@ -1,3 +1,4 @@
+# src/analysis.py
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -95,6 +96,8 @@ class FinancialInstrument:
     end_price = self.df['Close'].iloc[-1] 
 
     num_years = (self.df.index[-1] - self.df.index[0]).days / 365.25
+    if num_years == 0:
+        return 0.0
     cagr = (end_price / start_price) ** (1 / num_years) - 1
 
     return cagr
@@ -147,36 +150,35 @@ class TimeSeriesAnalysis(FinancialInstrument):
 
   @staticmethod
   def plot_all_growth(instruments):
-        """Plot relative growth of multiple tickers on one chart."""
-        ax = None
+        """
+        Plot relative growth of multiple tickers on one chart.
+        --- FIX: Returns the figure object instead of showing it. ---
+        """
+        fig, ax = plt.subplots(figsize=(10, 6))
         for ticker, inst in instruments.items():
             growth = inst.df['Close'] / inst.df['Close'].iloc[0]
             cagr = inst.compute_cagr()
-            ax = growth.plot(
-                ax=ax,
-                label=f"{ticker}, CAGR: {cagr:.2%}", 
-                alpha=0.7,
-                figsize=(10, 6)
-            )
+            ax.plot(growth.index, growth.values, label=f"{ticker}, CAGR: {cagr:.2%}", alpha=0.8)
 
-        if ax:
-            ax.set_title("Relative Growth Comparison (Start = 1)")
-            ax.set_ylabel("Growth (relative to 1)")
-            ax.legend()
-            plt.show()
-        else:
-            print("❌ No valid data to plot.")
+        ax.set_title("Relative Growth Comparison (Start = 1)")
+        ax.set_ylabel("Growth (relative to 1)")
+        ax.legend()
+        ax.grid(True, linestyle='--', alpha=0.6)
+        return fig
 
 
   @staticmethod
   def plot_all_returns(instruments):
-    """Plot yearly returns of multiple tickers on one chart."""
+    """
+    Plot yearly returns of multiple tickers on one chart.
+    --- FIX: Returns the figure object instead of showing it. ---
+    """
     yearly_returns = {}
 
     # Calculate yearly returns for each instrument
     for ticker, inst in instruments.items():
-        # Resample daily log returns to yearly returns
-        yearly = inst.df['Log_Returns'].resample('Y').sum() * 100 
+        # --- FIX: Use 'YE' for Year End to avoid FutureWarning ---
+        yearly = inst.df['Log_Returns'].resample('YE').sum() * 100 
         yearly.index = pd.to_datetime(yearly.index)  
         yearly_returns[ticker] = yearly
 
@@ -184,7 +186,7 @@ class TimeSeriesAnalysis(FinancialInstrument):
 
     # Plotting using matplotlib and set x-axis ticks to show only the year
     fig, ax = plt.subplots(figsize=(10, 6))
-    yearly_returns_df.plot(kind='bar', alpha=0.7, ax=ax)
+    yearly_returns_df.plot(kind='bar', alpha=0.7, ax=ax, width=0.8)
     ax.set_title("Yearly Returns Comparison")
     ax.set_ylabel("Return (%)")
     ax.set_xlabel("Year")
@@ -192,7 +194,8 @@ class TimeSeriesAnalysis(FinancialInstrument):
 
     years = [d.year for d in pd.to_datetime(yearly_returns_df.index)]
     ax.set_xticks(np.arange(len(years)))
-    ax.set_xticklabels(years, rotation=0)
-
+    ax.set_xticklabels(years, rotation=45)
+    
+    ax.grid(axis='y', linestyle='--', alpha=0.6)
     plt.tight_layout() 
-    plt.show()
+    return fig
