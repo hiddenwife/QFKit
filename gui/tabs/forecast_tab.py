@@ -11,26 +11,31 @@ from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 import traceback
 import functools
 import multiprocessing
+import pandas as pd  # Import pandas to handle data slicing
 
 from src.forecast import EpicBayesForecaster  # your Bayesian forecaster class
+import plotly.graph_objects as go
 
 
 # Worker used to run fitting in a background thread
 class Worker(QObject):
     finished = Signal()
     error = Signal(str)
-    result = Signal(str, object)  # ticker + forecaster object
+    # result now includes a flag for historical forecast
+    result = Signal(str, object, bool)  # ticker + forecaster object + is_historical
 
-    def __init__(self, fn, ticker):
+    def __init__(self, fn, ticker, is_historical):
         super().__init__()
         self.fn = fn
         self.ticker = ticker
+        self.is_historical = is_historical
 
     @Slot()
     def run(self):
         try:
             out = self.fn()
-            self.result.emit(self.ticker, out)
+            # Pass the is_historical flag back with the result
+            self.result.emit(self.ticker, out, self.is_historical)
         except Exception:
             self.error.emit(traceback.format_exc())
         finally:
@@ -257,7 +262,7 @@ class ForecastTab(QWidget):
         def on_method_changed(txt):
             is_nuts = "NUTS" in txt.upper()
             self.more_draws_checkbox.setVisible(is_nuts)
-            self.cores_container.setVisible(is_nuts) 
+            self.cores_container.setVisible(is_nuts)
             if is_nuts:
                 self.chains_row_enable(True)
                 _show_default_chains_widgets()
@@ -292,11 +297,17 @@ class ForecastTab(QWidget):
         plot_row.addWidget(self.plot_type)
         params_layout.addLayout(plot_row)
 
-        # --- Run button ---
+        # --- Run buttons ---
         btn_row = QHBoxLayout()
         self.run_forecast_btn = QPushButton("Run Forecast")
         self.run_forecast_btn.clicked.connect(self.run_forecast_for_selected)
         btn_row.addWidget(self.run_forecast_btn)
+
+        # NEW: Button for historical forecast comparison
+        self.run_historical_btn = QPushButton("Compare Forecast to History")
+        self.run_historical_btn.clicked.connect(self.run_historical_forecast)
+        btn_row.addWidget(self.run_historical_btn)
+
         self.global_status = QLabel("")
         btn_row.addWidget(self.global_status, stretch=1)
         params_layout.addLayout(btn_row)
@@ -377,9 +388,10 @@ class ForecastTab(QWidget):
         self.horizon_label.setText(str(snapped))
 
     # ---------------- Thread helper ----------------
-    def _run_task_in_thread(self, fn, ticker, result_slot):
+    def _run_task_in_thread(self, fn, ticker, result_slot, is_historical):
         thread = QThread()
-        worker = Worker(fn, ticker)
+        # Pass is_historical to the Worker
+        worker = Worker(fn, ticker, is_historical)
         worker.moveToThread(thread)
 
         worker.result.connect(result_slot)
@@ -402,12 +414,8 @@ class ForecastTab(QWidget):
         self._maybe_enable_run_button()
 
     # ---------------- Main entry ----------------
-    def run_forecast_for_selected(self):
-        selected = self._get_selected_tickers()
-        if not selected:
-            QMessageBox.information(self, "Selection Error", "Please select at least one ticker.")
-            return
-
+    def _get_forecast_params(self):
+        """Helper to get all forecast parameters from the UI."""
         steps = int(self.horizon_slider.value())
         p = int(self.ar_spin.value())
         plot_type = self.plot_type.currentText()
@@ -429,15 +437,40 @@ class ForecastTab(QWidget):
             chains = int(self.chains_slider.value())
 
         cores = int(self.cores_slider.value())
+        return steps, p, plot_type, method, draws, chains, cores
+
+    def _setup_run(self, selected_tickers, is_historical: bool = False):
+        """Disables buttons and sets global status."""
+        if not selected_tickers:
+            QMessageBox.information(self, "Selection Error", "Please select at least one ticker.")
+            return False
 
         self.run_forecast_btn.setEnabled(False)
+        self.run_historical_btn.setEnabled(False)
         status = "Running forecasts..."
-        statement = f"\nParameters: \n AR Order: {p} \n Plot Type: {plot_type} \n Method: {method} \n Posterior Draws: {draws} \n "
+        if is_historical:
+            status = "Running historical forecasts..."
+        
+        steps, p, plot_type, method, draws, chains, cores = self._get_forecast_params()
+        
+        statement = (f"\nParameters: \n AR Order: {p} \n Plot Type: {plot_type} \n "
+                     f"Method: {method} \n Posterior Draws: {draws} \n")
+
         if "nuts" in method:
             status += " (this may take a while)"
-            statement += f"Chains: {chains} \n Processors: {cores}\n"
+            statement += f" Chains: {chains} \n Processors: {cores}\n"
+        
         self.global_status.setText(status)
+        return steps, p, plot_type, method, draws, chains, cores, statement
 
+    def run_forecast_for_selected(self):
+        """Runs a forecast for the selected tickers starting from 'now'."""
+        selected = self._get_selected_tickers()
+        params = self._setup_run(selected, is_historical=False)
+        if not params: return
+
+        steps, p, _, method, draws, chains, cores, statement = params
+        
         for ticker in selected:
             inst = self.main_window.instruments.get(ticker)
             if inst is None:
@@ -448,7 +481,10 @@ class ForecastTab(QWidget):
             if lbl:
                 lbl.setText("Fitting...")
 
-            def task_fit(df=inst.df):
+            # Forecast: Use all available data
+            data_to_fit = inst.df
+
+            def task_fit(df=data_to_fit):
                 fc = EpicBayesForecaster(df)
                 self.log_print(statement)
                 self.log_print("Don't worry about pytensor errors!")
@@ -457,10 +493,50 @@ class ForecastTab(QWidget):
                 return fc
 
             bound_fn = functools.partial(task_fit)
-            self._run_task_in_thread(bound_fn, ticker, self._on_worker_result)
+            # is_historical = False
+            self._run_task_in_thread(bound_fn, ticker, self._on_worker_result, False)
 
-    @Slot(str, object)
-    def _on_worker_result(self, ticker, forecaster):
+    def run_historical_forecast(self):
+        """Runs a historical forecast, predicting the last 'steps' days."""
+        selected = self._get_selected_tickers()
+        params = self._setup_run(selected, is_historical=True)
+        if not params: return
+
+        steps, p, _, method, draws, chains, cores, statement = params
+
+        for ticker in selected:
+            inst = self.main_window.instruments.get(ticker)
+            if inst is None or inst.df is None or len(inst.df) <= steps:
+                msg = f"Skipping {ticker}: not enough data for historical forecast of {steps} days."
+                self.log_print(msg)
+                QMessageBox.warning(self, "Data Error", msg)
+                continue
+
+            lbl = self.status_labels.get(ticker)
+            if lbl:
+                lbl.setText("Fitting (Historical)...")
+
+            data_to_fit = inst.df.iloc[:-steps]
+
+            full_data = inst.df
+
+            def task_fit(df=data_to_fit, full_df=full_data):
+                fc = EpicBayesForecaster(df)
+                self.log_print(statement)
+                self.log_print("Don't worry about pytensor errors!")
+                fc.fit(p=p, draws=draws, method=method, tune=max(100, draws // 2),
+                       chains=chains, cores=cores, random_seed=42)
+                fc._full_df = full_df 
+                return fc
+
+            bound_fn = functools.partial(task_fit)
+            # is_historical = True
+            self._run_task_in_thread(bound_fn, ticker, self._on_worker_result, True)
+
+
+    @Slot(str, object, bool)
+    def _on_worker_result(self, ticker, forecaster, is_historical):
+
         try:
             lbl = self.status_labels.get(ticker)
             if lbl:
@@ -468,16 +544,106 @@ class ForecastTab(QWidget):
                 self.global_status.setText("Opening plot... Done!")
 
             steps = int(self.horizon_slider.value())
-            if self.plot_type.currentText().startswith("Interactive"):
-                fig = forecaster.plot_forecast_interactive(steps=steps)
-                self._show_plotly_in_dialog(fig, title=f"Forecast: {ticker}")
+
+            if is_historical:
+                
+                full_df = getattr(forecaster, "_full_df", None)
+
+                if full_df is None:
+                    # fallback to normal plotting if full data wasn't attached
+                    self.log_print(f"[{ticker}] Warning: no full_df attached to forecaster; plotting forecast only.")
+                    if self.plot_type.currentText().startswith("Interactive"):
+                        fig = forecaster.plot_forecast_interactive(steps=steps)
+                        self._show_plotly_in_dialog(fig, title=f"Historical Forecast: {ticker}")
+                    else:
+                        fig = forecaster.plot_forecast_matplotlib(steps=steps)
+                        self._show_matplotlib_in_dialog(fig, title=f"Historical Forecast: {ticker}")
+                else:
+                    price_col = None
+                    for c in ("Close"):
+                        if c in full_df.columns:
+                            price_col = c
+                            break
+                    if price_col is None:
+                        for c in full_df.columns:
+                            if pd.api.types.is_numeric_dtype(full_df[c]):
+                                price_col = c
+                                break
+                    if price_col is None:
+                        price_col = full_df.columns[0]
+
+                    data_used_for_fit = getattr(forecaster, "df", None)
+                    if data_used_for_fit is not None and len(data_used_for_fit) > 0:
+                        start_date = data_used_for_fit.index[-1]
+                    else:
+                        start_date = full_df.index[-steps] if len(full_df) > steps else full_df.index[0]
+
+                    if self.plot_type.currentText().startswith("Interactive"):
+                        try:
+                            fc_fig = forecaster.plot_forecast_interactive(steps=steps)
+                        except TypeError:
+                            fc_fig = forecaster.plot_forecast_interactive(steps)
+
+                        try:
+                            mask = full_df.index >= start_date
+                            if hasattr(fc_fig, "data"):
+                                combined = fc_fig
+                            else:
+                                combined = go.Figure()
+                            combined.add_trace(
+                                go.Scatter(
+                                    x=full_df.index[mask],
+                                    y=full_df.loc[mask, price_col],
+                                    mode="lines",
+                                    name="Actual",
+                                    line=dict(width=2, dash="dash")
+                                )
+                            )
+                            title = f"Historical Forecast: {ticker} (Predicting from {start_date.strftime('%Y-%m-%d')})"
+                            self._show_plotly_in_dialog(combined, title=title)
+                        except Exception:
+                            self.log_print(f"[{ticker}] failed to overlay actual (interactive):\n{traceback.format_exc()}")
+                            self._show_plotly_in_dialog(fc_fig, title=f"Historical Forecast: {ticker}")
+                    else:
+                        # Matplotlib path
+                        try:
+                            fc_fig = forecaster.plot_forecast_matplotlib(steps=steps)
+                        except TypeError:
+                            fc_fig = forecaster.plot_forecast_matplotlib(steps)
+
+                        try:
+                            fig = fc_fig
+                            ax = None
+                            if hasattr(fig, "axes") and fig.axes:
+                                ax = fig.axes[0]
+                            else:
+                                try:
+                                    ax = fig.gca()
+                                except Exception:
+                                    ax = None
+                            if ax is None:
+                                ax = fig.add_subplot(111)
+
+                            mask = full_df.index >= start_date
+                            ax.plot(full_df.index[mask], full_df.loc[mask, price_col], linestyle="--", label="Actual")
+                            ax.legend()
+                            title = f"Historical Forecast: {ticker} (Predicting from {start_date.strftime('%Y-%m-%d')})"
+                            self._show_matplotlib_in_dialog(fig, title=title)
+                        except Exception:
+                            self.log_print(f"[{ticker}] failed to overlay actual (matplotlib):\n{traceback.format_exc()}")
+                            self._show_matplotlib_in_dialog(fc_fig, title=f"Historical Forecast: {ticker}")
             else:
-                fig = forecaster.plot_forecast_matplotlib(steps=steps)
-                self._show_matplotlib_in_dialog(fig, title=f"Forecast: {ticker}")
+                # Live forecast
+                if self.plot_type.currentText().startswith("Interactive"):
+                    fig = forecaster.plot_forecast_interactive(steps=steps)
+                    self._show_plotly_in_dialog(fig, title=f"Forecast: {ticker}")
+                else:
+                    fig = forecaster.plot_forecast_matplotlib(steps=steps)
+                    self._show_matplotlib_in_dialog(fig, title=f"Forecast: {ticker}")
 
             if lbl:
                 lbl.setText("Done")
-            self.log_print(f"[{ticker}] Forecast complete.")
+            self.log_print(f"[{ticker}] Forecast complete (Historical: {is_historical}).")
         except Exception:
             self.log_print(f"[{ticker}] Plotting error:\n{traceback.format_exc()}")
             lbl = self.status_labels.get(ticker)
@@ -487,34 +653,44 @@ class ForecastTab(QWidget):
             self._maybe_enable_run_button()
 
     def _maybe_enable_run_button(self):
+        """Enables both run buttons if no threads are running."""
         if not self.running_threads:
             self.run_forecast_btn.setEnabled(True)
+            self.run_historical_btn.setEnabled(True)
             self.global_status.setText("")
 
     # ---------------- Plot helpers ----------------
     def _show_plotly_in_dialog(self, fig, title="Forecast"):
         try:
-            html = fig.to_html(include_plotlyjs="cdn")
-            dialog = QDialog(self)
-            dialog.setWindowTitle(title)
-            layout = QVBoxLayout(dialog)
-            view = QWebEngineView()
-            view.setHtml(html)
-            layout.addWidget(view)
-            dialog.resize(900, 650)
-            dialog.exec()
+            if hasattr(fig, 'to_html'):
+                html = fig.to_html(include_plotlyjs="cdn")
+                dialog = QDialog(self)
+                dialog.setWindowTitle(title)
+                layout = QVBoxLayout(dialog)
+                view = QWebEngineView()
+                view.setHtml(html)
+                layout.addWidget(view)
+                dialog.resize(900, 650)
+                dialog.exec()
+            else:
+                 self.log_print(f"Plotly display failed: Figure object not recognized.")
+
         except Exception:
             self.log_print(f"Plotly display failed:\n{traceback.format_exc()}")
 
     def _show_matplotlib_in_dialog(self, fig, title="Forecast"):
         try:
-            dialog = QDialog(self)
-            dialog.setWindowTitle(title)
-            layout = QVBoxLayout(dialog)
-            canvas = FigureCanvas(fig)
-            layout.addWidget(canvas)
-            dialog.resize(900, 650)
-            canvas.draw()
-            dialog.exec()
+            if fig and hasattr(fig, 'canvas'):
+                dialog = QDialog(self)
+                dialog.setWindowTitle(title)
+                layout = QVBoxLayout(dialog)
+                canvas = FigureCanvas(fig)
+                layout.addWidget(canvas)
+                dialog.resize(900, 650)
+                canvas.draw()
+                dialog.exec()
+            else:
+                self.log_print(f"Matplotlib display failed: Figure object not recognized.")
+
         except Exception:
             self.log_print(f"Matplotlib display failed:\n{traceback.format_exc()}")
