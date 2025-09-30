@@ -7,6 +7,7 @@ from PySide6.QtCore import Slot
 from src.analysis import TimeSeriesAnalysis
 import matplotlib
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
+from matplotlib.backends.backend_qtagg import NavigationToolbar2QT as NavigationToolbar
 
 
 class AnalysisTab(QWidget):
@@ -107,11 +108,13 @@ class AnalysisTab(QWidget):
             dialog.setWindowTitle(title)
             layout = QVBoxLayout(dialog)
             canvas = FigureCanvas(fig)
+            toolbar = NavigationToolbar(canvas, dialog)
+            layout.addWidget(toolbar)
             layout.addWidget(canvas)
             dialog.resize(900, 600)
             canvas.draw()
             # Use show() for a non-modal dialog, or exec() for a modal one
-            dialog.show()
+            dialog.exec() 
         except Exception as e:
             self.log_print(f"Error displaying plot: {e}")
 

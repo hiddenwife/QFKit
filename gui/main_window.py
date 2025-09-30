@@ -3,10 +3,12 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QPalette, QColor
 from .tabs import (LoadDataTab, PortfolioTab, AnalysisTab,
                    SimulationTab, ForecastTab, CompareTab)
-
+from PySide6.QtGui import QFont
 
 def apply_theme(app: QApplication):
     """Apply a simple, easy-to-tweak palette + stylesheet to the app."""
+    
+    QApplication.setFont(QFont("Arial", 10))  # Use a common font
     pal = QPalette()
     pal.setColor(QPalette.Window, QColor("#f3f4f6"))
     pal.setColor(QPalette.Base, QColor("#ffffff"))

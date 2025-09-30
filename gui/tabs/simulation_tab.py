@@ -5,6 +5,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Slot, QObject, Signal, QThread, Qt
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
+from matplotlib.backends.backend_qtagg import NavigationToolbar2QT as NavigationToolbar
 import traceback
 
 from src.simulation import Simulation
@@ -172,6 +173,8 @@ class SimulationTab(QWidget):
         dialog.setWindowTitle(title)
         layout = QVBoxLayout(dialog)
         canvas = FigureCanvas(fig)
+        toolbar = NavigationToolbar(canvas, dialog)
+        layout.addWidget(toolbar)
         layout.addWidget(canvas)
         dialog.resize(900, 600)
         canvas.draw()

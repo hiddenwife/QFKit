@@ -61,7 +61,7 @@ financial_tools/
 
 │   ├── main_window.py
 
-│   └── tabs/
+│   └── tabs/ 
 
 │   │   ├── __init__.py
 
@@ -75,7 +75,9 @@ financial_tools/
 
 │   │   ├── portfolio_tab.py
 
-│   │   └── simulation_tab.py
+│   │   ├── simulation_tab.py
+
+│   │   └── forecast_worker.py
 
 ├── src/
 

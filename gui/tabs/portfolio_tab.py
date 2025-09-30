@@ -9,6 +9,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 import matplotlib
+from matplotlib.backends.backend_qtagg import NavigationToolbar2QT as NavigationToolbar
 
 # Import domain logic
 from src.analysis import TimeSeriesAnalysis
@@ -272,10 +273,12 @@ class PortfolioTab(QWidget):
             dialog.setWindowTitle("Portfolio Plot")
             dlg_layout = QVBoxLayout(dialog)
             canvas = FigureCanvas(fig)
+            toolbar = NavigationToolbar(canvas, dialog)
+            dlg_layout.addWidget(toolbar)
             dlg_layout.addWidget(canvas)
             dialog.resize(900, 600)
             canvas.draw()
-            dialog.show()
+            dialog.exec() 
         except Exception as e:
             self.log_print(f"Error displaying plot: {e}")
 
