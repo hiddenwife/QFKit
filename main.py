@@ -93,11 +93,11 @@ elif current_os == "Darwin":
     cxx = shutil.which("c++") or shutil.which("g++") or shutil.which("clang++")
     if cxx:
         if is_clang_binary(cxx):
-            print(f"Using C++ compiler: {cxx} (clang) — OK for pytensor.")
+            print(f" - Using C++ compiler: {cxx} (clang) — OK for pytensor.")
         else:
-            print(f"Using C++ compiler: {cxx} — not clang. pytensor may not work as well; consider installing/using clang (Apple Clang) or setting CXX to clang++.")
+            print(f" - Using C++ compiler: {cxx} — not clang. pytensor may not work as well; consider installing/using clang (Apple Clang) or setting CXX to clang++.")
     else:
-        print("No C++ compiler found in PATH. pytensor may fail; install Xcode command line tools (clang).")
+        print(" - No C++ compiler found in PATH. pytensor may fail; install Xcode command line tools (clang).")
 
 else:
     print("Unknown OS - no settings applied.\n")
