@@ -2,7 +2,7 @@
 
 A modular Python toolkit for sophisticated **time-series analysis**, **portfolio construction**, **stochastic simulation**, and **Bayesian forecasting**. It leverages a responsive and intuitive GUI built with `PySide6` to make advanced quantitative tools accessible to everyone.
 
-This toolkit is **Windows**, **Linux** and **macOS** compatible (Windows 11, Ubuntu 24.04 and MacOS 15.6.1 respectively).
+This toolkit is **Windows**, **Linux** and **macOS** compatible (Windows 11, Ubuntu 24.04 and MacOS 15.6.1).
 
 ## Quick Start
 **Recommended**: Make a new virtual environment, then run:
@@ -10,6 +10,7 @@ This toolkit is **Windows**, **Linux** and **macOS** compatible (Windows 11, Ubu
 pip install -r requirements.txt
 python main.py
 ```
+- **Note**: `pytensor` needs a c++ compiler to function properly (g++ on windows/linux, clang++ on macOS).
 
 ## Overview and Usage
 This application provides a suite of tools for quantitative finance. Load financial tickers from Yahoo Finance, perform statistical analysis, construct and evaluate multi-asset portfolios, and project future performance using stochastic models and a Bayesian forecasting engine.
