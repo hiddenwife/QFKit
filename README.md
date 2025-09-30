@@ -51,7 +51,7 @@ This is the most powerful feature of the toolkit, leveraging the `PyMC` library 
 ## GUI & Architecture
 - **Tabbed Interface**: Functionality is segmented into modules: Data Loading, Analysis, Portfolio, Simulation, and Forecasting.
 - **Asynchronous & Responsive UI**: All computationally heavy tasks (MCMC sampling, Monte Carlo simulations) are managed asynchronously. Heavy computations (Bayesian forecasting) are isolated in a **separate sub-process** (`forecast_worker.py`) to prevent GUI freezing and ensure stable parallel computation across operating systems. Lighter tasks (like Monte Carlo) run on `QThread`.
-- **Integrated Workflow**: The application architecture is designed to pass data objects (like a constructed portfolio) seamlessly between different analysis tabs.
+- **Integrated Workflow**: The application architecture is designed to pass data objects (like a constructed portfolio) seamlessly between different tabs.
 
 ## Project Structure
 financial_tools/
