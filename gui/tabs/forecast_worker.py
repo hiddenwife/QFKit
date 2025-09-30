@@ -8,6 +8,8 @@ import argparse
 import traceback
 from pathlib import Path
 import pandas as pd
+# Add project root to sys.path so 'src' can be imported
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from src.forecast import EpicBayesForecaster
 
 # ==========================================================
@@ -25,9 +27,6 @@ os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
 os.environ.setdefault("MKL_NUM_THREADS", "1")
 os.environ.setdefault("NUMEXPR_NUM_THREADS", "1")
 
-# Add project root to sys.path so 'src' can be imported
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-
 
 def main():
     parser = argparse.ArgumentParser()
@@ -42,6 +41,7 @@ def main():
     parser.add_argument("--advi-iter", type=int, required=True)
     parser.add_argument("--sigma-prior", type=float, required=True)
     parser.add_argument("--is-historical", action='store_true')
+    parser.add_argument("--learn-bias-variance", action="store_true", help="Enable hierarchical bias & sigma scaling in the model")
     
     args = parser.parse_args()
 
@@ -55,14 +55,16 @@ def main():
         fc.fit(p=args.p, draws=args.draws, method=args.method,
                tune=max(100, args.draws // 2), chains=args.chains,
                cores=args.cores, random_seed=42,
-               advi_iter=args.advi_iter, sigma_prior_std=args.sigma_prior)
+               advi_iter=args.advi_iter, sigma_prior_std=args.sigma_prior,
+               learn_bias_variance=args.learn_bias_variance)
         
         forecast_data = fc.forecast(steps=args.steps, draws=args.draws)
 
         results = {
             "status": "success",
             "forecast_df": forecast_data,
-            "full_df": full_df
+            "full_df": full_df,
+            "learn_bias_variance": bool(args.learn_bias_variance)
         }
     except Exception as e:
         results = {

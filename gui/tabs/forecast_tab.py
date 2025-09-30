@@ -34,7 +34,7 @@ class ForecastWorkerThread(QThread):
     error = Signal(str)
     status_update = Signal(str)
 
-    def __init__(self, cmd, env, timeout=1200):
+    def __init__(self, cmd, env, timeout=3600):
         super().__init__()
         self.cmd = cmd
         self.env = env
@@ -147,7 +147,7 @@ class ForecastTab(QWidget):
         advi_row.setContentsMargins(0, 0, 0, 0)
         advi_row.addWidget(QLabel("ADVI Iterations:"))
         self.advi_spin = QSpinBox()
-        self.advi_spin.setRange(10000, 200000)
+        self.advi_spin.setRange(10000, 500000)
         self.advi_spin.setValue(30000)
         self.advi_spin.setSingleStep(5000)
         advi_row.addWidget(self.advi_spin)
@@ -224,6 +224,14 @@ class ForecastTab(QWidget):
         nuts_layout.addWidget(self.more_draws_checkbox)
         params_layout.addWidget(self.nuts_options_container)
 
+        # NEW: Learn bias & variance checkbox
+        learn_row = QHBoxLayout()
+        self.learn_bias_checkbox = QCheckBox("Learn bias + variance (hierarchical)")
+        self.learn_bias_checkbox.setToolTip("Enable learning an additive bias and sigma scaling factor in the Bayesian model.\nWarning: If enabled for NUTS, will take a LONG time, limit draws.")
+        learn_row.addWidget(self.learn_bias_checkbox)
+        learn_row.addStretch(1)
+        params_layout.addLayout(learn_row)
+
         plot_row = QHBoxLayout()
         plot_row.addWidget(QLabel("Plot Type:"))
         self.plot_type = QComboBox()
@@ -295,6 +303,7 @@ class ForecastTab(QWidget):
         else:
             params.update({"draws": self.draws_slider.value(), "chains": self.chains_slider.value()})
         params["cores"] = self.cores_slider.value()
+        params["learn_bias_variance"] = bool(self.learn_bias_checkbox.isChecked())
         return params
 
     def log_print(self, msg):
@@ -366,6 +375,8 @@ class ForecastTab(QWidget):
             log_msg += f"\n  - ADVI Iterations: {params['advi_iter']}"
         else:
             log_msg += f"\n  - Chains: {params['chains']}, Cores: {params['cores']}"
+        if params.get("learn_bias_variance"):
+            log_msg += "\n  - Learning bias & variance ENABLED"
         self.log_print(log_msg)
 
         input_file = tempfile.NamedTemporaryFile(delete=False, suffix=".pkl").name
@@ -385,6 +396,8 @@ class ForecastTab(QWidget):
         ]
         if is_historical:
             cmd.append("--is-historical")
+        if params.get("learn_bias_variance"):
+            cmd.append("--learn-bias-variance")
 
         env = os.environ.copy()
         env.update({"MPLCONFIGDIR": tempfile.mkdtemp()})
@@ -421,7 +434,8 @@ class ForecastTab(QWidget):
             self.nuts_options_container,
             self.plot_type,
             self.run_forecast_btn,
-            self.run_historical_btn
+            self.run_historical_btn,
+            self.more_draws_checkbox
         ]
         
         for control in controls_to_toggle:
@@ -439,6 +453,7 @@ class ForecastTab(QWidget):
             is_historical = "--is-historical" in self.worker_thread.cmd
             forecast_df = results["forecast_df"]
             full_df = results["full_df"]
+            used_learn = results.get("learn_bias_variance", False)
             
             history_len = 200
             history_df = full_df['Close']
@@ -453,6 +468,8 @@ class ForecastTab(QWidget):
             history_df = history_df.tail(history_len)
 
             title = f"{'Historical ' if is_historical else ''}Forecast: {self.active_ticker}"
+            if used_learn:
+                title += " (learned bias & variance)"
 
             fig = self._create_plot_figure(plot_type, history_df, forecast_df, actuals_df)
             self._plot_figure_ready.emit(fig, title, plot_type)
