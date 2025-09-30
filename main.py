@@ -65,6 +65,13 @@ def is_clang_binary(bin_path: str) -> bool:
     except Exception:
         return False
 
+def is_g___binary(bin_path: str) -> bool:
+    try:
+        out = subprocess.run([bin_path, "--version"], capture_output=True, text=True, check=True)
+        return "free software foundation" in out.stdout.lower() or "free software foundation" in out.stderr.lower()
+    except Exception:
+        return False
+
 # Apply settings based on the OS - edit these as you require.
 if current_os == "Linux":
     print("\nAppplying Linux based settings:")
@@ -81,14 +88,31 @@ if current_os == "Linux":
     # Forcing x11 if available.
     force_x11_unless_impossible()
 
+    cxx = shutil.which("c++") or shutil.which("g++")
+    if cxx:
+        if is_g___binary(cxx):
+            print(f" - Using C++ compiler: {cxx} (g++) — OK for pytensor.")
+        else:
+            print(f" - Not using g++ compiler: {cxx} - pytensor may fail")
+    else:
+        print(" - No C++ compiler found in PATH. pytensor may fail; install g++ compiler.")
+
+
 elif current_os == "Windows":
-    print("Applying Windows based settings.\n")
-    # windows stuff here
+    print("Applying Windows based settings:")
+    cxx = shutil.which("c++") or shutil.which("g++")
+    if cxx:
+        if is_g___binary(cxx):
+            print(f" - Using C++ compiler: {cxx} (g++) — OK for pytensor.")
+        else:
+            print(f" - Not using g++ compiler: {cxx} - pytensor may fail")
+    else:
+        print(" - No C++ compiler found in PATH. pytensor may fail; install g++ compiler.")
     pass
 
 elif current_os == "Darwin":
     # macOS stuff here
-    print("Applying macOS based settings.\n")
+    print("Applying macOS based settings:")
 
     cxx = shutil.which("c++") or shutil.which("g++") or shutil.which("clang++")
     if cxx:

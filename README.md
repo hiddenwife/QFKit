@@ -2,7 +2,7 @@
 
 A modular Python toolkit for sophisticated **time-series analysis**, **portfolio construction**, **stochastic simulation**, and **Bayesian forecasting**. It leverages a responsive and intuitive GUI built with `PySide6` to make advanced quantitative tools accessible to everyone.
 
-This toolkit is both **Windows** and **Linux** compatible (tested on Windows 11 and Ubuntu 24.04).
+This toolkit is **Windows**, **Linux** and **macOS** compatible (Windows 11, Ubuntu 24.04 and MacOS 15.6.1 respectively).
 
 ## Quick Start
 **Recommended**: Make a new virtual environment, then run:
