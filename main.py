@@ -16,6 +16,8 @@ import platform
 import multiprocessing as mp
 import matplotlib
 import subprocess, sys
+import shutil
+from subprocess import check_output
 
 # Check the operating system
 current_os = platform.system()
@@ -56,7 +58,12 @@ def force_x11_unless_impossible():
             os.environ.pop("QT_QPA_PLATFORM", None)
             print(" - X11 probe failed and no Wayland detected; QT_QPA_PLATFORM unset - using Qt defaults.")
 
-
+def is_clang_binary(bin_path: str) -> bool:
+    try:
+        out = subprocess.run([bin_path, "--version"], capture_output=True, text=True, check=True)
+        return "clang" in out.stdout.lower() or "clang" in out.stderr.lower()
+    except Exception:
+        return False
 
 # Apply settings based on the OS - edit these as you require.
 if current_os == "Linux":
@@ -79,10 +86,18 @@ elif current_os == "Windows":
     # windows stuff here
     pass
 
-elif current_os == "Darwin":  # macOS 
-    print("Applying macOS based settings.\n")
+elif current_os == "Darwin":
     # macOS stuff here
-    pass
+    print("Applying macOS based settings.\n")
+
+    cxx = shutil.which("c++") or shutil.which("g++") or shutil.which("clang++")
+    if cxx:
+        if is_clang_binary(cxx):
+            print(f"Using C++ compiler: {cxx} (clang) — OK for pytensor.")
+        else:
+            print(f"Using C++ compiler: {cxx} — not clang. pytensor may not work as well; consider installing/using clang (Apple Clang) or setting CXX to clang++.")
+    else:
+        print("No C++ compiler found in PATH. pytensor may fail; install Xcode command line tools (clang).")
 
 else:
     print("Unknown OS - no settings applied.\n")
