@@ -60,8 +60,8 @@ This is the most powerful feature of the toolkit, leveraging the `PyMC` library 
 This project is licenced under GNU GENERAL PUBLIC LICENSE Version 3, 29 June 2007. Please see LICENCE.txt for more details.
 
 ## Collaboration, Pull Requests & Contact
-If you'd like to help improve this project, I’d be really grateful! Contributions, ideas, and bug reports are all welcome. For small fixes or questions you can [open an issue]{https://github.com/hiddenwife/financial_tools/issues} first to discuss. 
-If you want to add code, suggest improvements, or report issues, please open a [pull request]{https://github.com/hiddenwife/financial_tools/pulls} on GitHub (or email me) with a short description of your change and any relevant tests or screenshots.
+If you'd like to help improve this project, I’d be really grateful! Contributions, ideas, and bug reports are all welcome. For small fixes or questions you can [open an issue](https://github.com/hiddenwife/financial_tools/issues) first to discuss. 
+If you want to add code, suggest improvements, or report issues, please open a [pull request](https://github.com/hiddenwife/financial_tools/pulls) on GitHub (or email me) with a short description of your change and any relevant tests or screenshots.
 
 - **Email**: github.reflector553@passinbox.com
 
