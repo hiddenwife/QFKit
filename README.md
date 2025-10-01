@@ -56,6 +56,15 @@ This is the most powerful feature of the toolkit, leveraging the `PyMC` library 
 - **Asynchronous & Responsive UI**: All computationally heavy tasks (MCMC sampling, Monte Carlo simulations) are managed asynchronously. Heavy computations (Bayesian forecasting) are isolated in a **separate sub-process** (`forecast_worker.py`) to prevent GUI freezing and ensure stable parallel computation across operating systems. Lighter tasks (like Monte Carlo) run on `QThread`.
 - **Integrated Workflow**: The application architecture is designed to pass data objects (like a constructed portfolio) seamlessly between different tabs.
 
+## Licence
+This project is licenced under GNU GENERAL PUBLIC LICENSE Version 3, 29 June 2007. Please see LICENCE.txt for more details.
+
+## Collaboration, Pull Requests & Contact
+If you wish to add code, suggest improvements, or report issues, please open a **pull request** on GitHub (or email me directly) with a short description of your change and any relevant tests or screenshots. For small fixes or questions you can also open an issue first to discuss.
+
+- **Email**: [github.reflector553@passinbox.com]
+
+
 ## Project Structure
 financial_tools/
 
