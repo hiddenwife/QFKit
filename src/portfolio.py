@@ -16,12 +16,13 @@ class Portfolio:
         if len(instruments) < 2:
             raise ValueError("Portfolio requires at least two instruments")
         self.instruments = instruments
-        # build a DataFrame of aligned log-returns (drop rows with any NA)
+        # build a DataFrame of aligned log-returns
         returns = pd.concat(
             {t: inst.df['Log_Returns'] for t, inst in instruments.items()},
             axis=1
         )
-        self.returns = returns.dropna()
+        # instead of dropping NAs, forward-fill so portfolio exists from earliest start
+        self.returns = returns.ffill().dropna()
 
     @classmethod
     def from_weighted_close_series(cls, name: str, instruments: dict, weights: np.ndarray):
@@ -43,12 +44,16 @@ class Portfolio:
 
         # build aligned close price DataFrame and compute weighted close
         close_prices = pd.concat({t: inst.df['Close'] for t, inst in instruments.items()}, axis=1)
-        close_prices = close_prices.dropna()
+
+        # forward-fill missing values so early instruments carry the portfolio before later ones start
+        close_prices = close_prices.ffill()
+
         portfolio_close = (close_prices * weights).sum(axis=1)
         df = pd.DataFrame(index=portfolio_close.index)
         df['Close'] = portfolio_close
-        df['Log_Returns'] = np.log(df['Close']).diff().dropna()
+        df['Log_Returns'] = np.log(df['Close']).diff()
         df.dropna(inplace=True)
+
         # return a simple object with df attribute
         class TS:
             def __init__(self, name, df):
