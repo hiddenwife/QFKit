@@ -120,7 +120,7 @@ class ForecastTab(QWidget):
         horizon_row = QHBoxLayout()
         horizon_row.addWidget(QLabel("Forecast horizon (days):"))
         self.horizon_slider = QSlider(Qt.Horizontal)
-        self.horizon_slider.setRange(5, 252)
+        self.horizon_slider.setRange(5, 250)
         self.horizon_slider.setValue(60)
         self.horizon_label = QLabel(str(self.horizon_slider.value()))
         self.horizon_slider.valueChanged.connect(lambda v: self.horizon_label.setText(str(v)))
@@ -159,7 +159,7 @@ class ForecastTab(QWidget):
         draws_default_layout.setContentsMargins(0, 0, 0, 0)
         draws_default_layout.addWidget(QLabel("Posterior Draws:"))
         self.draws_slider = QSlider(Qt.Horizontal)
-        self.draws_slider.setRange(1000, 50000)
+        self.draws_slider.setRange(1000, 100000) # Default to ADVI's max
         self.draws_slider.setValue(10000)
         self.draws_label = QLabel(str(self.draws_slider.value()))
         self.draws_slider.valueChanged.connect(lambda v: self.draws_label.setText(str(v)))
@@ -176,6 +176,9 @@ class ForecastTab(QWidget):
         self.draws_stack.addWidget(draws_default_container)
         self.draws_stack.addWidget(draws_custom_container)
         params_layout.addLayout(self.draws_stack)
+
+        self.more_draws_checkbox = QCheckBox("Use custom draws/chains")
+        params_layout.addWidget(self.more_draws_checkbox)
 
         self.nuts_options_container = QFrame()
         nuts_layout = QVBoxLayout(self.nuts_options_container)
@@ -220,14 +223,11 @@ class ForecastTab(QWidget):
         cores_row.addWidget(self.cores_slider, stretch=1)
         cores_row.addWidget(self.cores_label)
         nuts_layout.addLayout(cores_row)
-        self.more_draws_checkbox = QCheckBox("Use custom draws/chains")
-        nuts_layout.addWidget(self.more_draws_checkbox)
         params_layout.addWidget(self.nuts_options_container)
 
-        # NEW: Learn bias & variance checkbox
         learn_row = QHBoxLayout()
         self.learn_bias_checkbox = QCheckBox("Learn bias + variance (hierarchical)")
-        self.learn_bias_checkbox.setToolTip("Enable learning an additive bias and sigma scaling factor in the Bayesian model.\nWarning: If enabled for NUTS, will take a LONG time, limit draws.")
+        self.learn_bias_checkbox.setToolTip("Enable learning an additive bias and sigma scaling factor in the Bayesian model.\n\u274C Warning: If enabled for NUTS, will take a LONG time - limit number of draws.")
         learn_row.addWidget(self.learn_bias_checkbox)
         learn_row.addStretch(1)
         params_layout.addLayout(learn_row)
@@ -270,8 +270,20 @@ class ForecastTab(QWidget):
 
     def _on_method_changed(self, text):
         is_nuts = "NUTS" in text.upper()
+        
+        self.more_draws_checkbox.setText("Use custom draws/chains" if is_nuts else "Use custom draws")
         self.nuts_options_container.setVisible(is_nuts)
         self.advi_container.setVisible(not is_nuts)
+        
+        if is_nuts:
+            new_max = 15000
+            self.draws_slider.setMaximum(new_max)
+            # Cap the current value if it's too high
+            if self.draws_slider.value() > new_max:
+                self.draws_slider.setValue(new_max)
+        else: # ADVI
+            self.draws_slider.setMaximum(100000)
+
         self.update_cores_max()
 
     def _on_more_draws_toggled(self, checked):
@@ -281,29 +293,39 @@ class ForecastTab(QWidget):
 
     def update_cores_max(self):
         try:
-            chains_visible = self.more_draws_checkbox.isChecked() and self.nuts_options_container.isVisible()
-            chains = int(self.chains_input.text()) if chains_visible else self.chains_slider.value()
+            is_nuts = "NUTS" in self.method_combo.currentText()
+            use_custom = self.more_draws_checkbox.isChecked()
+            
+            chains = self.chains_slider.value()
+            if is_nuts and use_custom:
+                chains = int(self.chains_input.text())
         except (ValueError, AttributeError):
             chains = self.chains_slider.minimum()
+        
         max_cores = min(chains, getattr(self, "cpu_count", 1))
         self.cores_slider.setRange(1, max_cores)
         self.cores_label_prefix.setText(f"Cores to use (max {max_cores}):")
 
     def _get_forecast_params(self):
         method = "nuts" if "NUTS" in self.method_combo.currentText() else "advi"
+        use_custom = self.more_draws_checkbox.isChecked()
+
         params = {
             "steps": self.horizon_slider.value(),
             "p": self.ar_spin.value(),
             "plot_type": "plotly" if "Plotly" in self.plot_type.currentText() else "mpl",
             "method": method,
-            "advi_iter": self.advi_spin.value() if method == "advi" else 20000
+            "advi_iter": self.advi_spin.value() if method == "advi" else 20000,
+            "draws": int(self.draws_input.text()) if use_custom else self.draws_slider.value()
         }
-        if self.more_draws_checkbox.isChecked() and method == "nuts":
-            params.update({"draws": int(self.draws_input.text()), "chains": int(self.chains_input.text())})
+        
+        if method == "nuts":
+            params["chains"] = int(self.chains_input.text()) if use_custom else self.chains_slider.value()
         else:
-            params.update({"draws": self.draws_slider.value(), "chains": self.chains_slider.value()})
+            params["chains"] = 4 
+            
         params["cores"] = self.cores_slider.value()
-        params["learn_bias_variance"] = bool(self.learn_bias_checkbox.isChecked())
+        params["learn_bias_variance"] = self.learn_bias_checkbox.isChecked()
         return params
 
     def log_print(self, msg):
@@ -418,38 +440,33 @@ class ForecastTab(QWidget):
             self.worker_thread.wait(5000)
             self._cleanup_after_forecast("Forecast cancelled.")
 
-    # ==========================================================
-    # FIX: Disable controls individually to keep Cancel button active
-    # ==========================================================
     def _set_ui_running(self, is_running):
-        """Enable/disable UI controls based on forecast status."""
-        # List of all controls to disable, exclusing the cancel button
         controls_to_toggle = [
-            self.scroll,
-            self.horizon_slider,
+            self.scroll, 
+            self.horizon_slider, 
             self.ar_spin,
-            self.method_combo,
-            self.advi_container,
+            self.method_combo, 
+            self.advi_container, 
             self.draws_stack,
-            self.nuts_options_container,
+            self.nuts_options_container, 
             self.plot_type,
-            self.run_forecast_btn,
+            self.run_forecast_btn, 
             self.run_historical_btn,
-            self.more_draws_checkbox
+            self.more_draws_checkbox, 
+            self.learn_bias_checkbox,
+            self.draws_slider
+
         ]
-        
         for control in controls_to_toggle:
             control.setEnabled(not is_running)
-        
-        # Handle the cancel button separately
         self.cancel_btn.setEnabled(is_running)
-
 
     @Slot(dict)
     def _on_forecast_finished(self, results):
         if results.get("status") == "success":
             self.status_labels[self.active_ticker].setText("Plotting...")
-            plot_type = self._get_forecast_params()['plot_type']
+            params = self._get_forecast_params()
+            plot_type = params['plot_type']
             is_historical = "--is-historical" in self.worker_thread.cmd
             forecast_df = results["forecast_df"]
             full_df = results["full_df"]
@@ -468,10 +485,8 @@ class ForecastTab(QWidget):
             history_df = history_df.tail(history_len)
 
             title = f"{'Historical ' if is_historical else ''}Forecast: {self.active_ticker}"
-            if used_learn:
-                title += " (learned bias & variance)"
 
-            fig = self._create_plot_figure(plot_type, history_df, forecast_df, actuals_df)
+            fig = self._create_plot_figure(plot_type, history_df, forecast_df, actuals_df, used_learn)
             self._plot_figure_ready.emit(fig, title, plot_type)
             self.status_labels[self.active_ticker].setText("Done")
             self._cleanup_after_forecast("Done.")
@@ -504,9 +519,11 @@ class ForecastTab(QWidget):
                 except Exception: pass
         self.temp_files.clear()
 
-    def _create_plot_figure(self, plot_type, history_df, forecast_df, actuals_df=None):
-        method = self._get_forecast_params()['method']
-        method_label = "ADVI" if method == "advi" else "NUTS" 
+    def _create_plot_figure(self, plot_type, history_df, forecast_df, actuals_df, used_learn):
+        params = self._get_forecast_params()
+        method_label = "ADVI" if params['method'] == "advi" else "MCMC (NUTS)" 
+        title = f"Forecast for {self.active_ticker} with {method_label}"
+
         if plot_type == 'plotly':
             fig = go.Figure()
             fig.add_trace(go.Scatter(x=history_df.index, y=history_df.values, mode="lines", name="History", line=dict(color="black")))
@@ -519,15 +536,15 @@ class ForecastTab(QWidget):
             fig.add_trace(go.Scatter(x=forecast_df.index, y=forecast_df["lower_50"], mode="lines", fill="tonexty", name="50% CI", line=dict(width=0), fillcolor="rgba(65,105,225,0.5)"))
             if actuals_df is not None and not actuals_df.empty:
                 fig.add_trace(go.Scatter(x=actuals_df.index, y=actuals_df.values, mode="lines", name="Actual", line=dict(width=2, dash="dot", color="red")))
-            fig.update_layout(
-                template="plotly_white",
-                hovermode="x unified",
-                title=f"Forecast for {self.active_ticker} with {method_label}",
-                xaxis_title="Date", 
-                yaxis_title="Price"  
-            )
+            
+            if used_learn:
+                fig.add_trace(go.Scatter(x=[None], y=[None], mode='markers', name='\u2713 Learned Bias/Variance',
+                                         marker=dict(color='rgba(0,0,0,0)')))
+
+            fig.update_layout(template="plotly_white", hovermode="x unified", title=title,
+                              xaxis_title="Date", yaxis_title="Price")
             return fig
-        else:
+        else: # Matplotlib
             fig = Figure(figsize=(10, 5))
             ax = fig.add_subplot(111)
             ax.plot(history_df.index, history_df.values, label="History", color="black")
@@ -537,8 +554,11 @@ class ForecastTab(QWidget):
             ax.fill_between(forecast_df.index, forecast_df["lower_50"], forecast_df["upper_50"], color="steelblue", alpha=0.3, label="50% CI")
             if actuals_df is not None and not actuals_df.empty:
                 ax.plot(actuals_df.index, actuals_df.values, label="Actual", linestyle=":", color="red")
+            
+            if used_learn:
+                ax.plot([], [], ' ', label='\u2713 Learned Bias/Variance')
 
-            ax.set_title(f"Forecast for {self.active_ticker} with {method_label}")
+            ax.set_title(title)
             ax.set_xlabel("Date")
             ax.set_ylabel("Price")
             ax.legend()
