@@ -32,7 +32,7 @@ def apply_theme(app: QApplication):
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Financial Analysis & Simulation Toolkit")
+        self.setWindowTitle("QFKit")
         self.resize(700, 700)
         self.setMinimumWidth(600)
 

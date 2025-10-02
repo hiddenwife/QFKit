@@ -109,6 +109,10 @@ QFKit/
 
 │   └── simulation.py
 
+├── docs/
+
+│   └── QFKit_logo.png 
+
 ├── requirements.txt
 
 └── README.md
