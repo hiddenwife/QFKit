@@ -1,4 +1,4 @@
-# # Quantitative  <span style="font-size: 1.5em; color: lightblue;">Financial</span>  Forecasting Kit
+# Quantitative Financial/Forecasting Kit
 
 
 A modular Python toolkit for sophisticated **time-series analysis**, **portfolio construction**, **stochastic simulation**, and **Bayesian forecasting**. It leverages a responsive and intuitive GUI built with `PySide6` to make advanced quantitative tools accessible to everyone.
