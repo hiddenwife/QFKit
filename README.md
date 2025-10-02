@@ -1,4 +1,4 @@
-# Quantitative Financial/Forecasting Kit
+![alt text](https://github.com/hiddenwife/QFKit/tree/main/docs/QFKit_logo.png "logo")
 
 
 A modular Python toolkit for sophisticated **time-series analysis**, **portfolio construction**, **stochastic simulation**, and **Bayesian forecasting**. It leverages a responsive and intuitive GUI built with `PySide6` to make advanced quantitative tools accessible to everyone.
