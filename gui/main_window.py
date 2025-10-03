@@ -62,7 +62,6 @@ class MainWindow(QMainWindow):
         self.analysis_tab = AnalysisTab(self, load_tab=self.load_tab)
         self.simulation_tab = SimulationTab(self)
         self.forecast_tab = ForecastTab(self)
-        self.compare_tab = CompareTab(self)
 
         # Add tabs
         self.tabs.addTab(self.load_tab, "Load Data")
