@@ -2,7 +2,7 @@ from PySide6.QtWidgets import QMainWindow, QTabWidget, QWidget, QVBoxLayout, QTe
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QPalette, QColor
 from .tabs import (LoadDataTab, PortfolioTab, AnalysisTab,
-                   SimulationTab, ForecastTab, CompareTab)
+                   SimulationTab, ForecastTab)
 from PySide6.QtGui import QFont
 
 def apply_theme(app: QApplication):
