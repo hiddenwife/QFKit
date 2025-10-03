@@ -147,9 +147,9 @@ class Simulation(FinancialInstrument):
         ax.plot([], [], ' ', label=f"P(end > S0) = {prob_increase:.2%}")
 
         if time_varying:
-            ax.plot([], [], ' ', label='\u2713 Time-varying $\mu$ & $\sigma$')
+            ax.plot([], [], ' ', label='\u2713' + r" Time-varying $\mu$ & $\sigma$")
         if jump:
-            ax.plot([], [], ' ', label='\u2713 Merton Jumps')
+            ax.plot([], [], ' ', label='\u2713' + r" Merton Jumps")
 
         ax.set_title(f"Simulation: {self.ticker} ({params['horizon_years']}y, {params['n_sims']} sims)")
         ax.set_xlabel("Date")
