@@ -4,4 +4,3 @@ from .portfolio_tab import PortfolioTab
 from .analysis_tab import AnalysisTab
 from .simulation_tab import SimulationTab
 from .forecast_tab import ForecastTab
-from .compare_tab import CompareTab

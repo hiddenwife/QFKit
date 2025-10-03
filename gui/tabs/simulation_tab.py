@@ -168,7 +168,7 @@ class SimulationTab(QWidget):
         thread.started.connect(worker.run)
         thread.start()
 
-    def _display_plot_dialog(self, fig, title="Simulation Plot"):
+    def _display_plot_dialog(self, fig, title="Simulation Plot", ):
         dialog = QDialog(self)
         dialog.setWindowTitle(title)
         layout = QVBoxLayout(dialog)

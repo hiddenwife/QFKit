@@ -18,15 +18,17 @@ This application provides a suite of tools for quantitative finance. Load financ
 
 The integrated workflow allows for rapid iteration between analysis, portfolio construction, and forecasting. The primary goal is to provide a robust platform for evaluating and comparing investment strategies based on quantitative metrics.
 
-This toolkit empowers you to make data-driven investment decisions. Whether you're a student, an investor, or a researcher, this tool provides a powerful, user-friendly platform to explore financial data.
+This toolkit empowers you to make data-driven investment decisions. Whether you're a student learning about stochastic statistics, an investor exploring strategies, or a researcher using advaned forecasting tools, this tool provides a powerful user-friendly platform to explore financial data.
 
 ## Core Features
 ### Data loading & Analysis: 
-- **Data Fetching**: Pulls historical OHLCV data via yfinance and computes log returns.
+- **Data Fetching**: Pulls historical OHLCV data via yfinance.
 - **Performance Metrics**: Calculates standard industry metrics including CAGR, annualised volatility, and Sharpe Ratio.
 - **Growth Probability Models**: Estimates the probability of future price increases over specified horizons using a lognormal price distribution model.
+- **Strategy Visualisation**: Offers comparative plots for **Relative Growth** and **Yearly Returns**, alongside a detailed printout of **Key Statistics**.
+- **Signal Analysis**: Provides specialised plots to evaluate trading strategies, including the **Moving Average Crossover Strategy** (visualising entry/exit signals) and the **Rolling Sharpe Ratio** (tracking risk-adjusted performance over time).
 
-### Portfolio Analytics
+### Portfolio Analytics:
 - **Portfolio Construction**: Build weighted portfolios from any combination of loaded tickers. Weights are automatically normalised to construct a new portfolio time series.
 - **Risk Decomposition**: Generate correlation and covariance matrices for the portfolio's underlying assets.
 - **Variance Contribution Analysis**: Quantify each asset's percentage contribution to total portfolio variance.

@@ -10,7 +10,7 @@ class Simulation(FinancialInstrument):
         super().__init__(ticker, df)
 
     def _get_mu_sigma(self, window_days: int | None = None):
-        """Annualized mu, sigma (log returns); if window_days set, only use recent window."""
+        """Annualised mu, sigma (log returns); if window_days set, only use recent window."""
         r = np.log(self.df['Close'] / self.df['Close'].shift(1)).dropna()
         if window_days is not None:
             window_days = max(1, int(window_days))
@@ -88,7 +88,9 @@ class Simulation(FinancialInstrument):
     # ----------------------------------------------------------------
     # Run simulation wrapper
     # ----------------------------------------------------------------
-    def run_simulation(self, horizon_years=2, n_sims=1000, seed=None, window_days=None, heston=False, jump=False, time_varying=False):
+    def run_simulation(self, horizon_years=2, n_sims=1000, seed=None, window_days=None, heston=False, jump=False):
+        # The time_varying flag is implicitly handled by whether window_days is provided
+        time_varying = window_days is not None
         mu, sigma, med = self._get_mu_sigma(window_days=window_days)
 
         if heston:
@@ -126,6 +128,9 @@ class Simulation(FinancialInstrument):
         S0 = res['S0']
         prob_increase = res['prob_increase']
 
+        time_varying = params.get('time_varying', False)
+        jump = params.get('jump', False)
+
         sample = paths.iloc[:, :min(n_plot_paths, paths.shape[1])] / S0
         fig = Figure(figsize=(10, 6))
         ax = fig.subplots()
@@ -138,7 +143,13 @@ class Simulation(FinancialInstrument):
         median_path = np.exp((params['mu'] - 0.5 * params['sigma']**2) * time_grid)
         ax.plot(sample.index, expected_path, color="blue", linewidth=2.0, label=f"Expected (mean) = {expected_path[-1]:.2f}")
         ax.plot(sample.index, median_path, color='red', linestyle='--', linewidth=2, label=f"Median = {(median_path[-1]):.2f}")
-        ax.plot([],[],label=f"P(end > S0) = {prob_increase:.2%}")
+        
+        ax.plot([], [], ' ', label=f"P(end > S0) = {prob_increase:.2%}")
+
+        if time_varying:
+            ax.plot([], [], ' ', label='\u2713 Time-varying $\mu$ & $\sigma$')
+        if jump:
+            ax.plot([], [], ' ', label='\u2713 Merton Jumps')
 
         ax.set_title(f"Simulation: {self.ticker} ({params['horizon_years']}y, {params['n_sims']} sims)")
         ax.set_xlabel("Date")
@@ -146,9 +157,6 @@ class Simulation(FinancialInstrument):
         ax.grid(True)
         ax.legend()
         return fig
-
-
-
 
 class SDE_Simulation(Simulation):
     def __init__(self, ticker, df):

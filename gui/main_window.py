@@ -70,7 +70,6 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(self.analysis_tab, "Analysis")
         self.tabs.addTab(self.simulation_tab, "Simulation")
         self.tabs.addTab(self.forecast_tab, "Forecast")
-        self.tabs.addTab(self.compare_tab, "Compare")
 
         self.tabs.currentChanged.connect(self.on_tab_changed)
 
