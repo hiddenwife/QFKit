@@ -6,7 +6,7 @@ About:
   all accessible via an interactive GUI.
 
 Developer: Christopher Andrews
-GitHub: https://github.com/hiddenwife/financial_tools
+GitHub: https://github.com/hiddenwife/QFKit
 
 Read LICENCE for use of any of this code.
 
