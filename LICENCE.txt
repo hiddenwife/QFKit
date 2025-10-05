@@ -1,7 +1,7 @@
 GNU GENERAL PUBLIC LICENSE
 Version 3, 29 June 2007
 
-  Financial_Tools
+  QFKit
 
 Copyright (C) 2025 Christopher Andrews
 Everyone is permitted to copy and distribute verbatim copies
