@@ -168,11 +168,11 @@ class TimeSeriesAnalysis(FinancialInstrument):
 
         fig, ax = plt.subplots(figsize=(12, 6))
         ax.plot(df.index, df['Close'], label=f'{self.ticker} Close Price', alpha=0.6, color='lightblue')
-        ax.plot(df.index, df['SMA_short'], label=f'{short_window}-day SMA', color='orange')
-        ax.plot(df.index, df['SMA_long'], label=f'{long_window}-day SMA', color='green')
+        ax.plot(df.index, df['SMA_short'], label=f'{short_window}-day SMA', color='#FF8C00')
+        ax.plot(df.index, df['SMA_long'], label=f'{long_window}-day SMA', color='blue')
 
-        ax.scatter(buy_signals.index, buy_signals['Close'], marker='^', color='green', label='Buy Signal', s=30)
-        ax.scatter(sell_signals.index, sell_signals['Close'], marker='v', color='red', label='Sell Signal', s=30)
+        ax.scatter(buy_signals.index, buy_signals['Close'], marker='^', color='green', label='Buy Signal', s=15)
+        ax.scatter(sell_signals.index, sell_signals['Close'], marker='v', color='red', label='Sell Signal', s=15)
 
         ax.set_title(f"{self.ticker} Stock Price with Moving Average Strategy Signals")
         ax.set_ylabel("Stock Price")

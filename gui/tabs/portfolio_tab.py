@@ -4,6 +4,7 @@ from PySide6.QtWidgets import (
     QCheckBox, QLineEdit, QPushButton, QMessageBox, QSizePolicy, QSpacerItem, QDialog
 )
 from PySide6.QtCore import Slot
+from PySide6.QtGui import QDoubleValidator
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -110,6 +111,10 @@ class PortfolioTab(QWidget):
             wedit.setText("1.0")
             wedit.setEnabled(False)
             wedit.setStyleSheet("color: gray;")
+            validator = QDoubleValidator(0.0, 1e12, 8, wedit) 
+            validator.setNotation(QDoubleValidator.StandardNotation)
+            wedit.setValidator(validator)
+            wedit.setPlaceholderText("0.0")
             row.addWidget(wedit)
 
             cb.stateChanged.connect(make_on_state_changed(wedit))

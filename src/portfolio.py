@@ -21,8 +21,8 @@ class Portfolio:
             {t: inst.df['Log_Returns'] for t, inst in instruments.items()},
             axis=1
         )
-        # instead of dropping NAs, forward-fill so portfolio exists from earliest start
-        self.returns = returns.ffill().dropna()
+        # FIX: Using fillna(0) instead of ffill()
+        self.returns = returns.fillna(0)
 
     @classmethod
     def from_weighted_close_series(cls, name: str, instruments: dict, weights: np.ndarray):
