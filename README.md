@@ -42,7 +42,7 @@ Run sophisticated Monte Carlo simulations to model future price paths.
 
 ### Bayesian Forecasting Engine:
 This is the most powerful feature of the toolkit, leveraging the `PyMC` library for robust, probabilistic forecasting.
-- **Sophisticated Core Model**: An **Autoregressive (AR(p)) model with a Student-T likelihood**. This specification is chosen for its robustness in modeling the heavy-tailed nature of financial returns.
+- **Sophisticated Core Model**: An **Autoregressive (AR(p)) model with a Student-T likelihood**. This specification is chosen for its robustness in modelling the heavy-tailed nature of financial returns.
 - **Dual Inference Methods**:
   - **Full MCMC (NUTS)**: Employs the No-U-Turn Sampler (a Hamiltonian Monte Carlo method) for the most accurate posterior estimation.
     - You can specify the number of cores (processors) to utilise for parallel processing during intensive computations.
@@ -52,7 +52,7 @@ This is the most powerful feature of the toolkit, leveraging the `PyMC` library 
 - **Comparison to Hisory**: Can run the forecast in a historical (backtesting) mode, which withholds the latest data to compare the model's predictions against the actual historical movements.
 - **Robust Parallel Processing Architecture**: The forecast is executed in a **separate, isolated subprocess** (`forecast_worker.py`). This is a critical design choice to ensure **Linux/cross-platform compatibility**, prevent GUI freezing, and avoid known threading issues when combining `PySide6` with the `PyMC` library's parallel MCMC (NUTS) chains.
 - **Learn Bias/Variance**: Hierarchical Bias & Volatility Stabilisation. Stabilises drift and volatility estimates, especially for volatile or short histories, by partially pooling them toward an assumed market average.
-  - **Note**: Enabling this with MCMC (NUTS) exponentially increases the time taken for sampling, as the sampler must navigate a significantly more complex, high-dimensional parameter space. Reduce `draws` or swap to the faster `ADVI`.
+  - **Note**: Enabling this with MCMC (NUTS) exponentially increases the time taken for sampling, as the sampler must navigate a more complex parameter space. Reduce `draws` or swap to the faster `ADVI`.
 
 ## GUI & Architecture
 - **Tabbed Interface**: Functionality is segmented into modules: Data Loading, Analysis, Portfolio, Simulation, and Forecasting.
